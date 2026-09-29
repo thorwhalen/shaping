@@ -6,7 +6,8 @@
  * (per slot for resolves) is kept, so dragging a dial never queues a backlog of stale builds.
  */
 import wasmUrl from 'manifold-3d/manifold.wasm?url';
-import { builtInGenres, buildFromFigures, manifoldKernel, sourceToFigure, type Kernel } from 'shaping';
+import { buildFromFigures, manifoldKernel, sourceToFigure, type Kernel } from 'shaping';
+import { genres } from '../genres';
 import { exportModel } from 'shaping/export';
 import { decodeImage, makeResolvers, prepareMask } from 'shaping/imaging';
 import { getBlob, isBlobRef } from '../lib/blobs';
@@ -44,8 +45,8 @@ async function handle(req: Request): Promise<void> {
       return post({ kind: 'mask', id: req.id, slot: req.slot, preview: { width: r.mask.width, height: r.mask.height, data, threshold: r.threshold } }, [data.buffer]);
     }
     case 'build': {
-      const model = buildFromFigures(req.design, req.figures, { kernel: k, genres: builtInGenres });
-      const transfer = model.bodies.flatMap((b) => [b.positions.buffer, b.indices.buffer]);
+      const model = buildFromFigures(req.design, req.figures, { kernel: k, genres: genres });
+      const transfer = [...model.bodies, ...(model.union ? [model.union] : [])].flatMap((b) => [b.positions.buffer, b.indices.buffer]);
       return post({ kind: 'build', id: req.id, model }, transfer);
     }
     case 'export': {

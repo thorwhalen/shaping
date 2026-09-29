@@ -15,6 +15,23 @@ export function solidBodies(model: Model): Body[] {
   return model.bodies.filter((b) => b.indices.length >= 3 && b.positions.length >= 9);
 }
 
+/**
+ * What a single-solid format (STL, PLY) writes: the welded union when the model has several
+ * bodies, else its one body — as one vertex set with a colour per vertex (the colour of the body
+ * the vertex came from). Stacking bodies that share faces would not be a closed mesh.
+ */
+export function singleSolid(model: Model): { positions: Float32Array; indices: Uint32Array; colors: Uint8Array } {
+  const bodies = solidBodies(model);
+  if (bodies.length <= 1 || !model.union) return mergeBodies(bodies);
+  const key = (p: ArrayLike<number>, i: number) => `${p[3 * i].toFixed(4)},${p[3 * i + 1].toFixed(4)},${p[3 * i + 2].toFixed(4)}`;
+  const owner = new Map<string, string>();
+  for (const b of bodies) for (let i = 0; i < b.positions.length / 3; i++) owner.set(key(b.positions, i), b.color);
+  const { positions, indices } = model.union;
+  const colors = new Uint8Array(positions.length);
+  for (let v = 0; v < positions.length / 3; v++) colors.set(hexToRgb(owner.get(key(positions, v)) ?? bodies[0].color), 3 * v);
+  return { positions, indices, colors };
+}
+
 /** Normalise `#rgb` or `#rrggbb` to lower-case `#rrggbb`. */
 export function normalizeHex(color: string): string {
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());

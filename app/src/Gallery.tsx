@@ -3,7 +3,8 @@
  * none written as code), the user's saved designs, and a new design per genre.
  */
 import { useEffect, useState } from 'react';
-import { builtInGenres, copyDesign, DesignSchema, newDesign, type Design } from 'shaping';
+import { copyDesign, DesignSchema, newDesign, type Design } from 'shaping';
+import { genres } from './genres';
 import { designs, type SavedDesign } from './state/designs';
 
 const files = import.meta.glob('../../examples/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -30,8 +31,8 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Start</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {Object.values(builtInGenres).map((g) => (
-            <button key={g.id} onClick={() => onOpen(newDesign(g.id, builtInGenres))} className="flex flex-col items-start gap-1 rounded-lg border border-line bg-white p-4 text-left hover:border-accent">
+          {Object.values(genres).map((g) => (
+            <button key={g.id} onClick={() => onOpen(newDesign(g.id, genres))} className="flex flex-col items-start gap-1 rounded-lg border border-line bg-white p-4 text-left hover:border-accent">
               <span className="font-medium">New: {g.title}</span>
               <span className="text-sm text-muted">{g.description}</span>
             </button>
@@ -47,7 +48,7 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2">
                 <button className="flex flex-1 flex-col items-start text-left" onClick={() => onOpen(s.design)}>
                   <span className="font-medium">{s.title}</span>
-                  <span className="text-xs text-muted">{builtInGenres[s.genre]?.title ?? s.genre} · {new Date(s.updated).toLocaleString()}</span>
+                  <span className="text-xs text-muted">{genres[s.genre]?.title ?? s.genre} · {new Date(s.updated).toLocaleString()}</span>
                 </button>
                 <button aria-label={`Delete ${s.title}`} title="Delete" className="text-xs text-muted hover:text-red-700" onClick={() => void designs.remove(s.id).then(() => designs.list().then(setSaved))}>
                   ✕
@@ -67,7 +68,7 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
                 <span className="font-medium">{d.title}</span>
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: d.style.color }} />
               </span>
-              <span className="text-xs uppercase tracking-wide text-muted">{builtInGenres[d.genre]?.title}</span>
+              <span className="text-xs uppercase tracking-wide text-muted">{genres[d.genre]?.title}</span>
               {d.description && <span className="text-sm text-muted">{d.description}</span>}
             </button>
           ))}

@@ -113,5 +113,11 @@ export interface Diagnostics {
 /** The output of a build: what the viewer shows and what the exporters write. */
 export interface Model {
   bodies: Body[];
+  /**
+   * The union of all bodies as ONE closed mesh (mm), present when there are several bodies.
+   * Formats that hold a single solid (STL, PLY) write this: stacking bodies that share faces
+   * would not be a closed mesh.
+   */
+  union?: { positions: Float32Array; indices: Uint32Array };
   diagnostics: Diagnostics;
 }

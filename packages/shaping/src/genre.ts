@@ -54,6 +54,8 @@ export interface GenreBody {
   solid: Solid;
   /** A colour the genre insists on; otherwise the design's style decides. */
   color?: string;
+  /** This body is meant to overlap earlier ones (a base sunk into the parts): it gives way silently. */
+  yields?: boolean;
 }
 
 /** What a genre returns. Handles are valid only inside the build's kernel scope. */
@@ -69,6 +71,8 @@ export interface Genre<P = Record<string, unknown>> {
   title: string;
   description: string;
   slots: Slot[];
+  /** Sources a new design of this genre starts with, per slot, so it opens on something that works. */
+  starter?: Record<string, import('./design.js').Source>;
   /** The dials, with defaults. The dials panel is generated from this schema. */
   params: z.ZodType<P>;
   /**

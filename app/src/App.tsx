@@ -11,7 +11,7 @@ import { LookPanel } from './panels/LookPanel';
 import { OutputPanel } from './panels/OutputPanel';
 import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
-import { pushRoute, readRoute, replaceRoute, type Route } from './state/route';
+import { cameFromApp, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
 import { Viewer } from './viewer/Viewer';
 
@@ -64,7 +64,12 @@ export function App() {
         replaceRoute(r);
         setRoute(r);
       }}
-      onBack={() => history.back()}
+      onBack={() => {
+        if (cameFromApp()) return history.back();
+        const r = { design: null, panel: route.panel };
+        replaceRoute(r);
+        setRoute(r);
+      }}
     />
   );
 }

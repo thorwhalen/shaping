@@ -4,8 +4,9 @@
  * animation that changes the solid rebuilds the model for every frame: the file shows exactly
  * what would be exported at that moment, never a screen effect.
  */
-import { useMemo, useState } from 'react';
-import { builtInGenres, DEFAULT_PROFILE, getPath, PROFILES, type Design, type Model } from 'shaping';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DEFAULT_PROFILE, getPath, PROFILES, type Design, type Model } from 'shaping';
+import { genres } from '../genres';
 import { z } from 'zod';
 import { designAt, frameCount, rebuildsGeometry, sweep, turntable } from 'shaping/animate';
 import { exporters, exportFileName, type Operation } from 'shaping/export';
@@ -111,6 +112,7 @@ function MediaSection({ design, model, setOverride, setStatus }: { design: Desig
   const [sweepPath, setSweepPath] = useState<string>('');
   const [progress, setProgress] = useState<number | null>(null);
   const sweepables = useSweepables(design);
+  const previewRun = useRef(0);
   const chosen = sweepables.find((s) => s.path === sweepPath) ?? sweepables[0];
 
   const animation = kind === 'turntable' || !chosen
@@ -168,16 +170,24 @@ function MediaSection({ design, model, setOverride, setStatus }: { design: Desig
     const at = withDefaults(design, animation);
     const count = frameCount(animation);
     setProgress(0);
-    for (let i = 0; i <= count; i++) {
-      const d = designAt(at, (i % count) / animation.fps);
-      const m = geometric ? await geometry().build(d, figs, 'frame') : model;
-      if (m) setOverride({ design: d, model: m });
-      await new Promise((r) => setTimeout(r, 1000 / animation.fps));
-      setProgress(i / count);
+    const run = ++previewRun.current;
+    try {
+      for (let i = 0; i <= count && previewRun.current === run; i++) {
+        const d = designAt(at, (i % count) / animation.fps);
+        const m = geometric ? await geometry().build(d, figs, 'frame') : model;
+        if (m) setOverride({ design: d, model: m });
+        await new Promise((r) => setTimeout(r, 1000 / animation.fps));
+        setProgress(i / count);
+      }
+    } catch (e) {
+      setStatus((e as Error).message);
+    } finally {
+      setOverride(null);
+      setProgress(null);
     }
-    setOverride(null);
-    setProgress(null);
   }
+  // Leaving the panel stops a running preview.
+  useEffect(() => () => void previewRun.current++, []);
 
   const busy = progress !== null;
   return (
@@ -223,7 +233,7 @@ function MediaSection({ design, model, setOverride, setStatus }: { design: Desig
 /** Numeric genre dials that can be swept, with their ranges, read from the genre's schema. */
 function useSweepables(design: Design): Array<{ path: string; title: string; min: number; max: number }> {
   return useMemo(() => {
-    const genre = builtInGenres[design.genre];
+    const genre = genres[design.genre];
     const out: Array<{ path: string; title: string; min: number; max: number }> = [];
     const walk = (schema: unknown, prefix: string) => {
       const s = schema as { properties?: Record<string, { type?: string; minimum?: number; maximum?: number; title?: string; sweep?: boolean; properties?: object }> };
@@ -245,7 +255,7 @@ function useSweepables(design: Design): Array<{ path: string; title: string; min
 
 /** The design with its genre's defaults written out, so an animation can address any dial. */
 function withDefaults(design: Design, animation: Design['animation']): Design {
-  return { ...design, params: builtInGenres[design.genre].params.parse(design.params) as Record<string, unknown>, animation };
+  return { ...design, params: genres[design.genre].params.parse(design.params) as Record<string, unknown>, animation };
 }
 
 const toJson = (schema: z.ZodType) => z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' });

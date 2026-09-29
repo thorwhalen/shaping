@@ -4,7 +4,7 @@
  * polygons, exact at any zoom. The model is millimetres with z up; this component turns it once
  * into three.js's y-up world.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Body, Design, Model, PlanarRegion } from 'shaping';
@@ -35,6 +35,7 @@ function BodyMesh({ body, design, clip }: { body: Body; design: Design; clip: TH
     g.dispose();
     return creased;
   }, [body]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   const m = materialFor(design.style);
   return (
     <mesh geometry={geometry} castShadow receiveShadow>
@@ -81,6 +82,7 @@ function RegionMesh({ region, lift = 0 }: { region: PlanarRegion; lift?: number 
     const matrix = new THREE.Matrix4().makeBasis(u, v, n).setPosition(o);
     return { fill, lines, matrix };
   }, [region, lift]);
+  useEffect(() => () => (fill.dispose(), lines.dispose()), [fill, lines]);
   const style = REGION_STYLE[region.role];
   const outlineOnly = region.role === 'target';
   return (

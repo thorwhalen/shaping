@@ -3,7 +3,7 @@
  * vertex carrying its body's colour. Printing frame (mm, +Z up), see `axes.ts` for why.
  */
 import { convertPositions } from './axes.js';
-import { mergeBodies, solidBodies, utf8 } from './mesh.js';
+import { singleSolid, utf8 } from './mesh.js';
 import type { ExportOptions } from './types.js';
 import type { Model } from '../types.js';
 
@@ -11,7 +11,7 @@ const VERTEX_BYTES = 15; // 3 x float32 + 3 x uint8
 const FACE_BYTES = 13; // uint8 count + 3 x int32
 
 export function writePly(model: Model, _options: ExportOptions = {}): Uint8Array {
-  const { positions, indices, colors } = mergeBodies(solidBodies(model));
+  const { positions, indices, colors } = singleSolid(model);
   const p = convertPositions(positions, 'print');
   const nv = p.length / 3;
   const nf = indices.length / 3;

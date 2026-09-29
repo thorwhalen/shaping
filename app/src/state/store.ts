@@ -5,7 +5,8 @@
  * turning a genre dial never re-traces an image.
  */
 import { produce } from 'immer';
-import { builtInGenres, prepareParams, type Design, type Figure, type Model } from 'shaping';
+import { prepareParams, type Design, type Figure, type Model } from 'shaping';
+import { genres } from '../genres';
 import { create } from 'zustand';
 import type { MaskPreview } from '../worker/protocol';
 import { geometry } from '../worker/client';
@@ -46,13 +47,23 @@ const figureKey = (d: Design, slot: string) => JSON.stringify([d.sources[slot], 
 
 let busyTimer: ReturnType<typeof setTimeout> | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+/** The design edited last and not yet saved: saved when the timer fires, the design changes, or the page hides. */
+let pendingSave: Design | null = null;
+
+export function flushSave() {
+  clearTimeout(saveTimer);
+  const d = pendingSave;
+  pendingSave = null;
+  if (d) void designs.save(d);
+}
+if (typeof addEventListener !== 'undefined') addEventListener('pagehide', flushSave);
 
 export const useApp = create<AppState>()((set, get) => {
   /** Resolve missing figures, then rebuild. Called after every change of the design. */
   async function refresh() {
     const d = get().design;
     if (!d) return;
-    const genre = builtInGenres[d.genre];
+    const genre = genres[d.genre];
     if (!genre) return set({ error: `Unknown genre "${d.genre}".` });
     set({ stale: true });
     clearTimeout(busyTimer);
@@ -89,11 +100,11 @@ export const useApp = create<AppState>()((set, get) => {
 
   function changed() {
     void refresh();
+    const d = get().design;
+    if (!d) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      const d = get().design;
-      if (d) void designs.save(d);
-    }, AUTOSAVE_AFTER_MS);
+    pendingSave = d;
+    saveTimer = setTimeout(flushSave, AUTOSAVE_AFTER_MS);
   }
 
   return {
@@ -106,7 +117,8 @@ export const useApp = create<AppState>()((set, get) => {
     masks: {},
     activeSlot: '',
     open(design) {
-      const slot = design ? (builtInGenres[design.genre]?.slots[0]?.id ?? '') : '';
+      flushSave();
+      const slot = design ? (genres[design.genre]?.slots[0]?.id ?? '') : '';
       set({ design, model: null, figures: {}, masks: {}, error: null, activeSlot: slot });
       if (design) changed();
     },

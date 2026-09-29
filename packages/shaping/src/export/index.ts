@@ -49,6 +49,8 @@ export const exporters: Record<string, Exporter> = {
 export function exportModel(model: Model, id: string, options: ExportOptions = {}): Uint8Array {
   const exporter = Object.hasOwn(exporters, id) ? exporters[id] : undefined;
   if (!exporter) throw new Error(`Unknown export format "${id}". Available: ${Object.keys(exporters).join(', ')}`);
+  if (exporter.kind === '3d' && !model.bodies.some((b) => b.indices.length >= 3))
+    throw new Error('The model is empty: there is nothing to export. See the warnings for why.');
   return exporter.write(model, options);
 }
 

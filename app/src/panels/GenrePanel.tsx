@@ -3,7 +3,8 @@
  * express (per-part transforms and colours, one-click fixes) is written here.
  */
 import { useState } from 'react';
-import { ASSIGNMENTS, builtInGenres, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model } from 'shaping';
+import { ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model } from 'shaping';
+import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
 import { useApp } from '../state/store';
 import { geometry } from '../worker/client';
@@ -11,15 +12,15 @@ import { geometry } from '../worker/client';
 export function GenrePanel() {
   const design = useApp((s) => s.design)!;
   const update = useApp((s) => s.update);
-  const genre = builtInGenres[design.genre];
+  const genre = genres[design.genre];
   const params = genre.params.parse(design.params) as Record<string, unknown>;
   const onChange = (path: string, v: unknown) => update((d) => setParam(d, path, v));
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-1" role="radiogroup" aria-label="Genre">
-        {Object.values(builtInGenres).map((g) => (
-          <button key={g.id} role="radio" aria-checked={g.id === design.genre} onClick={() => g.id !== design.genre && update((d) => switchGenre(d, g.id, builtInGenres))} className={`flex-1 rounded-md border px-2 py-1 text-sm ${g.id === design.genre ? 'border-accent bg-accent text-white' : 'border-line bg-white hover:border-muted'}`}>
+        {Object.values(genres).map((g) => (
+          <button key={g.id} role="radio" aria-checked={g.id === design.genre} onClick={() => g.id !== design.genre && update((d) => switchGenre(d, g.id, genres))} className={`flex-1 rounded-md border px-2 py-1 text-sm ${g.id === design.genre ? 'border-accent bg-accent text-white' : 'border-line bg-white hover:border-muted'}`}>
             {g.title}
           </button>
         ))}

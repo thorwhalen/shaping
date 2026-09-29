@@ -6,16 +6,6 @@
 import type { GenreTable } from './build.js';
 import { DESIGN_VERSION, parseDesign, type Design, type Source } from './design.js';
 
-/** Sources a new design starts with, per genre, so every genre opens on something that works. */
-export const STARTER_SOURCES: Record<string, Record<string, Source>> = {
-  turned: { figure: { kind: 'shape', shape: 'star', n: 5, ratio: 0.5 } },
-  'shadow-blocks': {
-    front: { kind: 'text', text: 'G', round: 0.15, spacing: 1 },
-    side: { kind: 'text', text: 'E', round: 0.15, spacing: 1 },
-    top: { kind: 'text', text: 'B', round: 0.15, spacing: 1 },
-  },
-};
-
 const randomId = () => Math.random().toString(36).slice(2, 10);
 
 /** A new design for a genre, with starter sources and default parameters. */
@@ -23,7 +13,7 @@ export function newDesign(genreId: string, genres: GenreTable, { id = randomId()
   const genre = genres[genreId];
   if (!genre) throw new Error(`Unknown genre "${genreId}". Available: ${Object.keys(genres).join(', ')}`);
   const fallback: Source = { kind: 'shape', shape: 'circle', n: 5, ratio: 0.5 };
-  const sources = Object.fromEntries(genre.slots.map((s) => [s.id, STARTER_SOURCES[genreId]?.[s.id] ?? fallback]));
+  const sources = Object.fromEntries(genre.slots.map((s) => [s.id, genre.starter?.[s.id] ?? fallback]));
   return parseDesign({ version: DESIGN_VERSION, id, title: title ?? genre.title, genre: genreId, sources, params: {} });
 }
 

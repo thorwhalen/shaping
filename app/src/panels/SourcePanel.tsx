@@ -4,20 +4,8 @@
  * SVG, or a drawing. Changing a dial re-runs from the original image, never from a previous result.
  */
 import { useEffect, useRef, useState } from 'react';
-import {
-  BLOCK_FONT_CHARS,
-  builtInGenres,
-  DrawingSourceSchema,
-  PrepareSchema,
-  prepareParams,
-  PROFILES,
-  setPrepare,
-  setSource,
-  ShapeSourceSchema,
-  TextSourceSchema,
-  type Design,
-  type Source,
-} from 'shaping';
+import { BLOCK_FONT_CHARS, DrawingSourceSchema, PrepareSchema, prepareParams, PROFILES, setPrepare, setSource, ShapeSourceSchema, TextSourceSchema, type Design, type Source } from 'shaping';
+import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
 import { DrawingCanvas } from '../draw';
 import { putBlob } from '../lib/blobs';
@@ -55,7 +43,7 @@ export function SourcePanel({ profileId }: { profileId: string }) {
   const activeSlot = useApp((s) => s.activeSlot);
   const setActiveSlot = useApp((s) => s.setActiveSlot);
   const figures = useApp((s) => s.figures);
-  const genre = builtInGenres[design.genre];
+  const genre = genres[design.genre];
   const slot = genre.slots.find((s) => s.id === activeSlot) ?? genre.slots[0];
   const source = design.sources[slot.id];
   const [stash, setStash] = useState<Record<string, Partial<Record<Kind, Source>>>>({});

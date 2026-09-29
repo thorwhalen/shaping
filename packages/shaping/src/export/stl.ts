@@ -6,7 +6,7 @@
  * vertices) and a uint16 attribute count of zero. Bodies are concatenated.
  */
 import { convertPositions } from './axes.js';
-import { boundsOf, fmt, solidBodies, triangleNormal, utf8 } from './mesh.js';
+import { boundsOf, fmt, singleSolid, solidBodies, triangleNormal, utf8 } from './mesh.js';
 import type { ExportOptions } from './types.js';
 import type { Model } from '../types.js';
 
@@ -23,7 +23,8 @@ export function stlHeaderText(model: Model): string {
 }
 
 export function writeStl(model: Model, _options: ExportOptions = {}): Uint8Array {
-  const bodies = solidBodies(model);
+  const solid = singleSolid(model);
+  const bodies = [{ positions: solid.positions, indices: solid.indices }];
   const triangles = bodies.reduce((s, b) => s + b.indices.length / 3, 0);
   const out = new Uint8Array(HEADER_BYTES + 4 + triangles * TRIANGLE_BYTES);
   out.set(utf8(stlHeaderText(model)).subarray(0, HEADER_BYTES));

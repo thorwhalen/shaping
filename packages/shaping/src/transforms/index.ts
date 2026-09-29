@@ -91,7 +91,8 @@ function revolveProfile(k: Kernel, part: Region, p: z.output<typeof RevolveParam
   if (s.rightArea > eps && s.leftArea > eps && p.policy === 'refuse')
     throw new Error('This part crosses the revolve axis (policy "refuse"). Move the axis, add an offset, or choose "clip" or "both".');
   const profiles = p.policy === 'both' ? [s.right, s.left].filter((x) => k.area(x) > eps) : [s.rightArea >= s.leftArea ? s.right : s.left];
-  const mirrored = p.policy !== 'both' && s.rightArea < s.leftArea;
+  // The kept profile came from the left of the axis: a single-sided `both`, or `clip` keeping the left.
+  const mirrored = p.policy === 'both' ? s.rightArea <= eps && s.leftArea > eps : s.rightArea < s.leftArea;
   return { profiles, mirrored, crosses: s.rightArea > eps && s.leftArea > eps };
 }
 

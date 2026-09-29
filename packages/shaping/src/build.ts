@@ -94,7 +94,7 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
       if (taken) {
         const before = kernel.volume(s);
         s = kernel.subtract(s, taken);
-        if (before > 0 && kernel.volume(s) < before * (1 - OVERLAP_SHARE)) {
+        if (!b.yields && before > 0 && kernel.volume(s) < before * (1 - OVERLAP_SHARE)) {
           trimmed.add(b.partId);
           warnings.push(`Part ${b.partId} overlaps earlier parts; the shared volume went to them.`);
         }
@@ -212,6 +212,7 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     const bb = kernel.bbox(allMm);
     return {
       bodies: outBodies,
+      union: outBodies.length > 1 ? kernel.mesh(allMm) : undefined,
       diagnostics: { volume: kernel.volume(allMm), pieces, cavities, genus: kernel.genus(allMm), bbox: bb, regions, shadows: shadows.length ? shadows : undefined, warnings },
     };
   });

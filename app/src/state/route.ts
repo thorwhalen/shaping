@@ -23,5 +23,7 @@ function href(r: Route): string {
   return location.pathname + (s ? `?${s}` : '');
 }
 
-export const pushRoute = (r: Route) => history.pushState(r, '', href(r));
-export const replaceRoute = (r: Route) => history.replaceState(r, '', href(r));
+/** Entries the app pushed carry `pushed: true`, so the in-app Back never leaves the app. */
+export const pushRoute = (r: Route) => history.pushState({ ...r, pushed: true }, '', href(r));
+export const cameFromApp = () => Boolean((history.state as { pushed?: boolean } | null)?.pushed);
+export const replaceRoute = (r: Route) => history.replaceState({ ...r, pushed: cameFromApp() }, '', href(r));
