@@ -7,7 +7,7 @@
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { Body, Design, Model, PlanarRegion } from 'shaping';
+import { recolor, type Body, type Design, type Model, type PlanarRegion } from 'shaping';
 import { lightDirection, modelCentre, modelRadius } from './camera';
 import { materialFor } from './materials';
 
@@ -147,6 +147,8 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
   const view = design.view;
   // The sun aims at the model's centre (by default a directional light aims at the origin).
   const sunTarget = useMemo(() => new THREE.Object3D(), []);
+  // Colours are display fields: the model is coloured here, exactly as the exporters colour it.
+  const coloured = useMemo(() => recolor(model, design.style), [model, design.style]);
   const b = model.diagnostics.bbox;
   const r = modelRadius(b);
   const c = modelCentre(b);
@@ -179,7 +181,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
       />
       <group rotation={Z_UP_TO_Y_UP}>
         <group visible>
-          {model.bodies.map((body, i) => (
+          {coloured.bodies.map((body, i) => (
             <group key={`${body.partId}-${i}`}>
               <BodyMesh body={body} design={dimmed ? { ...design, style: { ...design.style, opacity: Math.min(design.style.opacity, 0.35) } } : design} clip={clip} />
             </group>

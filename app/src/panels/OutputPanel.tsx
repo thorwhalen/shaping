@@ -5,7 +5,7 @@
  * what would be exported at that moment, never a screen effect.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_PROFILE, getPath, PROFILES, type Design, type Model } from 'shaping';
+import { DEFAULT_PROFILE, getPath, PROFILES, type Design, type Model, recolor } from 'shaping';
 import { genres } from '../genres';
 import { z } from 'zod';
 import { designAt, frameCount, rebuildsGeometry, sweep, turntable } from 'shaping/animate';
@@ -36,7 +36,8 @@ export function OutputPanel({ profileId, setProfileId, setOverride }: { profileI
     const handle = await pickSaveHandle(name, ex.mediaType);
     setStatus(`Writing ${name}…`);
     try {
-      const bytes = await geometry().export(model, id, options);
+      // Colours are display fields: export the model coloured as it is shown.
+      const bytes = await geometry().export(recolor(model, design.style), id, options);
       await saveBytes(bytes, name, ex.mediaType, handle);
       setStatus(`Saved ${name} (${(bytes.length / 1024).toFixed(0)} kB).`);
     } catch (e) {

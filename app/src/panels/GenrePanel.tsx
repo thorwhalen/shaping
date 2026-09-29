@@ -3,7 +3,7 @@
  * express (per-part transforms and colours, one-click fixes) is written here.
  */
 import { useState } from 'react';
-import { ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model } from 'shaping';
+import { ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model, recolor } from 'shaping';
 import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
 import { useApp } from '../state/store';
@@ -108,7 +108,7 @@ function TurnedParts({ design, params }: { design: Design; params: Record<string
         <div className="flex flex-col gap-1">
           <div className="text-sm font-medium">Parts</div>
           {parts.map((p, i) => {
-            const color = design.style.partColors[p.id] ?? model?.bodies.find((b) => b.partId === p.id)?.color ?? PART_PALETTE[i % PART_PALETTE.length];
+            const color = design.style.partColors[p.id] ?? (model ? recolor(model, design.style) : null)?.bodies.find((b) => b.partId === p.id)?.color ?? PART_PALETTE[i % PART_PALETTE.length];
             const ov = overrides[p.id] ?? {};
             const isHidden = hidden.includes(p.id);
             return (

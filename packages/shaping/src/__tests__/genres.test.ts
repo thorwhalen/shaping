@@ -139,7 +139,9 @@ describe('buildKey', () => {
     expect(buildKey({ ...d, view: { ...d.view, lightAzimuthDeg: 120, azimuthDeg: 200, camera: 'orthographic' } })).toBe(k);
     expect(buildKey({ ...d, style: { ...d.style, material: 'glass', opacity: 0.5 } })).toBe(k);
     expect(buildKey({ ...d, view: { ...d.view, wallGap: 1.5 } })).not.toBe(k);
-    expect(buildKey({ ...d, style: { ...d.style, color: '#000000' } })).not.toBe(k);
+    // Colours are display fields since the camera-pose change: the viewer and exporters recolour.
+    expect(buildKey({ ...d, style: { ...d.style, color: '#000000', partColors: { x: '#fff' } } })).toBe(k);
+    expect(buildKey({ ...d, view: { ...d.view, distance: 9, panX: 1, fovDeg: 20, zoom: 3 } })).toBe(k);
   });
 
   it('the build really ignores every field tagged render (guards the tags)', async () => {
@@ -164,5 +166,17 @@ describe('design migration', () => {
     expect((d.sources.figure as { round: number }).round).toBeCloseTo(0.2 / 0.49, 6);
     const again = parseDesign(d);
     expect(again).toEqual(d);
+  });
+});
+
+describe('recolor', () => {
+  it('recolouring a model gives exactly the colours a build with that style gives', async () => {
+    const { parseDesign, recolor } = await import('../index.js');
+    const d = parseDesign(example('nested-rings'));
+    const base = await build(d, { kernel });
+    const style = { ...d.style, color: '#123456', partColors: { K1: '#abcdef' }, palette: false };
+    const rebuilt = await build({ ...d, style }, { kernel });
+    expect(recolor(base, style).bodies.map((b) => b.color)).toEqual(rebuilt.bodies.map((b) => b.color));
+    expect(recolor(base, d.style)).toBe(base);
   });
 });

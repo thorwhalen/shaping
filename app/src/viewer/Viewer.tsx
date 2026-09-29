@@ -8,8 +8,8 @@ import { Environment, Lightformer, OrbitControls, OrthographicCamera, Perspectiv
 import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
-import type { Design, Model } from 'shaping';
-import { cameraPose, framingBox, modelRadius } from './camera';
+import type { Design, Model, View } from 'shaping';
+import { cameraFor, clampPose, framingBox, modelRadius, POSE_BOUNDS, poseFromCamera, samePose, type CameraSpec } from './camera';
 import { Scene } from './Scene';
 
 export interface CaptureRequest {
@@ -29,7 +29,6 @@ const frameOverride: { set: ((o: { design: Design; model: Model } | null) => voi
 export const MIN_OBJECT_PX = 90;
 /** The camera never comes closer to the centre than this many model radii. */
 const MIN_DISTANCE_RADII = 1.1;
-const DEFAULT_FOV_DEG = 35;
 
 /**
  * Where the camera looks from: the unit vector from the orbit target to the camera, in scene
@@ -53,30 +52,90 @@ export const cameraView = (() => {
   };
 })();
 
-function CameraRig({ design, model, resetKey }: { design: Design; model: Model; resetKey: number }) {
+/** Pause after the last orbit movement (damping included) before the pose is written back. */
+const POSE_WRITEBACK_MS = 250;
+
+/** Set up a three.js camera from a spec: the one place screen and export cameras are configured. */
+export function applyCamera(cam: THREE.PerspectiveCamera | THREE.OrthographicCamera, spec: CameraSpec, aspect: number) {
+  if (cam instanceof THREE.PerspectiveCamera) {
+    cam.fov = spec.fovDeg;
+    cam.aspect = aspect;
+    cam.zoom = 1;
+  } else {
+    cam.left = -spec.halfHeight * aspect;
+    cam.right = spec.halfHeight * aspect;
+    cam.top = spec.halfHeight;
+    cam.bottom = -spec.halfHeight;
+    cam.zoom = spec.zoom;
+  }
+  cam.near = spec.near;
+  cam.far = spec.far;
+  cam.position.set(...spec.position);
+  cam.up.set(0, 1, 0);
+  cam.lookAt(...spec.target);
+  cam.updateProjectionMatrix();
+}
+
+/**
+ * The on-screen camera: placed from the shown design's pose (so a preview or a played sequence
+ * moves it), and orbiting with the mouse writes the pose back into the design (so what is stored,
+ * and what an export renders, is always what is on screen).
+ */
+function CameraRig({ design, model, resetKey, onPose }: { design: Design; model: Model; resetKey: number; onPose: (pose: Partial<View>) => void }) {
   const controls = useRef<React.ComponentRef<typeof OrbitControls>>(null);
-  const { camera } = useThree();
-  const b = framingBox(model, design.view);
-  const r = modelRadius(b);
-  // Move the camera when the view dials change (or on reset), not on every rebuild.
+  const { camera, size } = useThree();
+  const box = framingBox(model, design.view);
+  const r = modelRadius(box);
   const v = design.view;
+  const spec = cameraFor(v, box);
+  const aspect = size.width / Math.max(1, size.height);
+  const boxKey = [...box.min, ...box.max].map((x) => x.toFixed(3)).join(',');
+  const userMoving = useRef(false);
+  const gestureEnded = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const writeBackRef = useRef<() => void>(() => undefined);
+
   useEffect(() => {
-    const pose = cameraPose(v, b);
-    camera.position.set(...pose.position);
-    if (camera instanceof THREE.OrthographicCamera) camera.zoom = Math.min(window.innerWidth, window.innerHeight) / (r * 3.2);
-    camera.near = r / 100;
-    camera.far = r * 100;
-    camera.updateProjectionMatrix();
-    controls.current?.target.set(...pose.target);
-    controls.current?.update();
-    if (controls.current) cameraView.set(camera, controls.current.target);
+    // A write-back still pending (the user just moved): store it first, so this re-application
+    // (a resize, a rebuild changing the frame) never throws the user's movement away.
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+      writeBackRef.current();
+      return;
+    }
+    const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+    const c = controls.current;
+    // Skip when the camera is already there (e.g. this change is our own write-back).
+    const here = c ? poseFromCamera(cam.position.toArray() as [number, number, number], c.target.toArray() as [number, number, number], cam.zoom, box, v.camera) : null;
+    if (here && samePose(here, v) && (!(cam instanceof THREE.PerspectiveCamera) || cam.fov === spec.fovDeg) && (cam instanceof THREE.PerspectiveCamera ? cam.aspect === aspect : cam.top === spec.halfHeight && cam.right === spec.halfHeight * aspect)) return;
+    applyCamera(cam, spec, aspect);
+    c?.target.set(...spec.target);
+    c?.update();
+    if (c) cameraView.set(cam, c.target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v.azimuthDeg, v.elevationDeg, v.camera, v.walls, v.wallGap, resetKey, camera]);
+  }, [v.azimuthDeg, v.elevationDeg, v.distance, v.panX, v.panY, v.panZ, v.fovDeg, v.zoom, v.camera, boxKey, aspect, resetKey, camera]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const writeBack = () => {
+    timer.current = undefined;
+    const c = controls.current;
+    if (!c) return;
+    const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+    const pose = clampPose(poseFromCamera(cam.position.toArray() as [number, number, number], c.target.toArray() as [number, number, number], cam.zoom, box, v.camera));
+    // The gesture is over only once the pointer was released and the camera has settled since.
+    if (gestureEnded.current) userMoving.current = false;
+    if (!samePose(pose, v)) onPose(pose);
+  };
+  writeBackRef.current = writeBack;
+
   // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
-  const { size } = useThree();
-  const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : DEFAULT_FOV_DEG;
-  const maxDistance = (r * size.height) / (MIN_OBJECT_PX * Math.tan(((fov / 2) * Math.PI) / 180));
-  const minZoom = MIN_OBJECT_PX / (2 * r);
+  const maxDistance = Math.min(POSE_BOUNDS.distance.max * r, (r * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180)));
+  const minZoom = Math.max(POSE_BOUNDS.zoom.min, (MIN_OBJECT_PX / size.height) * (spec.halfHeight / r));
+  // Polar angle is measured from straight up: elevation e is polar 90° - e.
+  const minPolar = ((90 - POSE_BOUNDS.elevationDeg.max) * Math.PI) / 180;
+  const maxPolar = ((90 - POSE_BOUNDS.elevationDeg.min) * Math.PI) / 180;
   return (
     <OrbitControls
       ref={controls}
@@ -86,7 +145,20 @@ function CameraRig({ design, model, resetKey }: { design: Design; model: Model; 
       minDistance={r * MIN_DISTANCE_RADII}
       maxDistance={maxDistance}
       minZoom={minZoom}
-      onChange={() => controls.current && cameraView.set(camera, controls.current.target)}
+      maxZoom={POSE_BOUNDS.zoom.max}
+      minPolarAngle={minPolar}
+      maxPolarAngle={maxPolar}
+      onStart={() => {
+        userMoving.current = true;
+        gestureEnded.current = false;
+      }}
+      onEnd={() => void (gestureEnded.current = true)}
+      onChange={() => {
+        if (controls.current) cameraView.set(camera, controls.current.target);
+        if (!userMoving.current) return;
+        clearTimeout(timer.current);
+        timer.current = setTimeout(writeBack, POSE_WRITEBACK_MS);
+      }}
     />
   );
 }
@@ -98,14 +170,10 @@ function Capture() {
       frameOverride.set?.({ design, model });
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const target = new THREE.WebGLRenderTarget(width, height, { samples: 4, colorSpace: THREE.SRGBColorSpace });
-      const frame = framingBox(model, design.view);
-      const pose = cameraPose(design.view, frame);
-      const r = modelRadius(frame);
-      const cam = design.view.camera === 'orthographic'
-        ? new THREE.OrthographicCamera((-r * 1.6 * width) / height, (r * 1.6 * width) / height, r * 1.6, -r * 1.6, r / 100, r * 100)
-        : new THREE.PerspectiveCamera(35, width / height, r / 100, r * 100);
-      cam.position.set(...pose.position);
-      cam.lookAt(...pose.target);
+      // The same camera function as the screen, with the frame's own pose: an export is the view.
+      const spec = cameraFor(design.view, framingBox(model, design.view));
+      const cam = design.view.camera === 'orthographic' ? new THREE.OrthographicCamera() : new THREE.PerspectiveCamera();
+      applyCamera(cam, spec, width / height);
       const prevBg = scene.background;
       if (transparent) scene.background = null;
       gl.setRenderTarget(target);
@@ -136,10 +204,12 @@ export interface ViewerProps {
   showSlices: boolean;
   override: { design: Design; model: Model } | null;
   setOverride: (o: { design: Design; model: Model } | null) => void;
+  /** Called when the user has orbited, panned or zoomed: the new pose, to store in the design. */
+  onPose: (pose: Partial<View>) => void;
   children?: ReactNode;
 }
 
-export function Viewer({ design, model, busy, resetKey, showSlices, override, setOverride, children }: ViewerProps) {
+export function Viewer({ design, model, busy, resetKey, showSlices, override, setOverride, onPose, children }: ViewerProps) {
   frameOverride.set = setOverride;
   const shown = override ?? (model ? { design, model } : null);
   return (
@@ -153,14 +223,15 @@ export function Viewer({ design, model, busy, resetKey, showSlices, override, se
         }}
       >
         <color attach="background" args={[shown?.design.style.background ?? design.style.background]} />
-        {design.view.camera === 'orthographic' ? <OrthographicCamera makeDefault position={[0, 0, 100]} /> : <PerspectiveCamera makeDefault fov={35} position={[0, 0, 100]} />}
-        <Environment resolution={128} environmentIntensity={design.view.environmentIntensity} environmentRotation={[0, (design.view.lightAzimuthDeg * Math.PI) / 180, 0]}>
+        {(shown?.design ?? design).view.camera === 'orthographic' ? <OrthographicCamera makeDefault manual position={[0, 0, 100]} /> : <PerspectiveCamera makeDefault position={[0, 0, 100]} />}
+        {/* The environment follows the frame being shown (a preview or a captured frame), like the lights. */}
+        <Environment resolution={128} environmentIntensity={(shown?.design ?? design).view.environmentIntensity} environmentRotation={[0, ((shown?.design ?? design).view.lightAzimuthDeg * Math.PI) / 180, 0]}>
           <Lightformer intensity={2} position={[0, 5, -9]} scale={[10, 10, 1]} />
           <Lightformer intensity={1.2} position={[-5, 1, -1]} rotation-y={Math.PI / 2} scale={[10, 2, 1]} />
           <Lightformer intensity={1.2} position={[5, 1, -1]} rotation-y={-Math.PI / 2} scale={[10, 2, 1]} />
         </Environment>
         {shown && <Scene design={shown.design} model={shown.model} dimmed={busy && !override} showSlices={showSlices} />}
-        {model && <CameraRig design={design} model={model} resetKey={resetKey} />}
+        {shown && <CameraRig design={shown.design} model={shown.model} resetKey={resetKey} onPose={override ? () => undefined : onPose} />}
         <Capture />
       </Canvas>
       {children}

@@ -1,5 +1,5 @@
 /** Materials, colour, light and view: the dials of the Design's `style` and `view` sections. */
-import { PART_PALETTE, StyleSchema, ViewSchema } from 'shaping';
+import { PART_PALETTE, recolor, StyleSchema, ViewSchema } from 'shaping';
 import { Dials } from '../dials/Dials';
 import { useApp } from '../state/store';
 
@@ -64,7 +64,8 @@ function PartColours() {
   const model = useApp((s) => s.model);
   const edit = useApp((s) => s.edit);
   const style = useApp((s) => s.design!.style);
-  const bodies = model?.bodies ?? [];
+  // Colours are display fields: show them as the viewer and the exporters apply them.
+  const bodies = model ? recolor(model, style).bodies : [];
   if (bodies.length === 0) return null;
   return (
     <section className="flex flex-col gap-2">

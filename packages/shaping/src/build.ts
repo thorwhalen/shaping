@@ -26,6 +26,26 @@ const OVERLAP_SHARE = 0.01;
 /** Colours given to parts when the design asks for a palette. */
 export const PART_PALETTE = ['#d4763b', '#3b7dd4', '#4caf6d', '#c94f7c', '#e0b43a', '#7a5cc9', '#3aa9b0', '#8a8f3c', '#d45f3b', '#5a6b8c'];
 
+/**
+ * The colour of a body: the style's colour for that part, else the genre's, else a palette colour
+ * (when there are several parts and the palette is on), else the style's colour. Pure and cheap.
+ */
+export function bodyColor(style: Pick<Design['style'], 'color' | 'partColors' | 'palette'>, partId: string, index: number, count: number, genreColor?: string): string {
+  return style.partColors[partId] ?? genreColor ?? (style.palette && count > 1 ? PART_PALETTE[index % PART_PALETTE.length] : style.color);
+}
+
+/**
+ * A model coloured by a style, without a rebuild. Colour fields are display fields (`render` in the
+ * schema): the viewer and the exporters both pass the model through this, so what is shown and what
+ * is written always agree. Returns the same model when nothing changes.
+ */
+export function recolor(model: Model, style: Pick<Design['style'], 'color' | 'partColors' | 'palette'>): Model {
+  const n = model.bodies.length;
+  const colors = model.bodies.map((b, i) => bodyColor(style, b.partId, i, n, b.genreColor));
+  if (colors.every((c, i) => c === model.bodies[i].color)) return model;
+  return { ...model, bodies: model.bodies.map((b, i) => ({ ...b, color: colors[i] })) };
+}
+
 export interface BuildFromFiguresOptions {
   kernel: Kernel;
   genres: GenreTable;
@@ -124,8 +144,8 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     const style = design.style;
     const outBodies: Body[] = bodies.map((b, i) => {
       const m = kernel.mesh(toMm(b.solid));
-      const color = style.partColors[b.partId] ?? b.color ?? (style.palette && bodies.length > 1 ? PART_PALETTE[i % PART_PALETTE.length] : style.color);
-      return { partId: b.partId, positions: m.positions, indices: m.indices, color };
+      const color = bodyColor(style, b.partId, i, bodies.length, b.color);
+      return { partId: b.partId, positions: m.positions, indices: m.indices, color, ...(b.color ? { genreColor: b.color } : {}) };
     });
 
     const allMm = toMm(all);
