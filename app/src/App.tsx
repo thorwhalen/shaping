@@ -6,12 +6,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_PROFILE, liveChecks, PROFILES, type Design, type Model } from 'shaping';
 import { EXAMPLES, Gallery } from './Gallery';
+import { Notices } from './persist/Notices';
+import { useSharedLink } from './persist/useSharedLink';
 import { GenrePanel } from './panels/GenrePanel';
 import { LookPanel } from './panels/LookPanel';
 import { OutputPanel } from './panels/OutputPanel';
 import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
-import { cameFromApp, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
+import { cameFromApp, DEFAULT_PANEL, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
@@ -59,8 +61,18 @@ export function App() {
     setRoute(r);
   }, [open]);
 
-  if (!route.design || !design) return route.design ? <Loading /> : <Gallery onOpen={openDesign} />;
-  return (
+  // A shared link (?s=) lands here: save the copy, then replace the link's address with the copy's own.
+  useSharedLink((d) =>
+    void designs.save(d).then(() => {
+      const r = { design: d.id, panel: DEFAULT_PANEL };
+      replaceRoute(r);
+      setRoute(r);
+    }),
+  );
+
+  const screen = !route.design || !design ? (
+    route.design ? <Loading /> : <Gallery onOpen={openDesign} />
+  ) : (
     <Editor
       panel={route.panel}
       setPanel={(panel) => {
@@ -75,6 +87,12 @@ export function App() {
         setRoute(r);
       }}
     />
+  );
+  return (
+    <>
+      {screen}
+      <Notices />
+    </>
   );
 }
 

@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react';
 import { copyDesign, DesignSchema, newDesign, type Design } from 'shaping';
 import { genres } from './genres';
+import { CollectionTools } from './persist/CollectionTools';
+import { InstallNotice } from './persist/InstallNotice';
 import { designs, type SavedDesign } from './state/designs';
 
 const files = import.meta.glob('../../examples/*.json', { eager: true, import: 'default' }) as Record<string, unknown>;
@@ -15,9 +17,8 @@ export const EXAMPLES: Design[] = Object.values(files)
 
 export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
   const [saved, setSaved] = useState<SavedDesign[]>([]);
-  useEffect(() => {
-    void designs.list().then(setSaved);
-  }, []);
+  const refresh = () => void designs.list().then(setSaved);
+  useEffect(refresh, []);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-8">
@@ -40,9 +41,17 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
         </div>
       </section>
 
+      <section className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Your designs</h2>
+          <CollectionTools count={saved.length} onChanged={refresh} />
+        </div>
+        {saved.length === 0 && <p className="text-sm text-muted">Designs you make are kept in this browser. Import a saved file to bring some back.</p>}
+        <InstallNotice />
+      </section>
+
       {saved.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Your designs</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             {saved.map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2">
