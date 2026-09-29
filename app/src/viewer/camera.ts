@@ -3,7 +3,7 @@
  * ("reset view") and for every exported frame, so a turntable is the same on screen and on file.
  * Scene coordinates: three.js y-up; the model (z-up, millimetres) is turned once, in `Scene`.
  */
-import type { Box3, View } from 'shaping';
+import type { Box3, Model, View } from 'shaping';
 
 /** Distance of the camera from the centre, in multiples of the model's bounding radius. */
 export const CAMERA_DISTANCE = 4;
@@ -31,4 +31,26 @@ export function lightDirection(view: View): [number, number, number] {
   const az = (view.lightAzimuthDeg * Math.PI) / 180;
   const el = (view.lightElevationDeg * Math.PI) / 180;
   return [Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)];
+}
+
+/**
+ * The box the camera frames: the model's, grown to include the diagnostic walls when they are
+ * shown, so the walls and the shadows on them are in view.
+ */
+export function framingBox(model: Model, view: View): Box3 {
+  const b = model.diagnostics.bbox;
+  const min = [...b.min] as [number, number, number];
+  const max = [...b.max] as [number, number, number];
+  if (!view.walls) return { min, max };
+  for (const r of model.diagnostics.regions) {
+    if (r.role !== 'target') continue;
+    for (const p of r.polygons)
+      for (const [u, v] of p.outer)
+        for (let i = 0; i < 3; i++) {
+          const x = r.origin[i] + u * r.u[i] + v * r.v[i];
+          min[i] = Math.min(min[i], x);
+          max[i] = Math.max(max[i], x);
+        }
+  }
+  return { min, max };
 }

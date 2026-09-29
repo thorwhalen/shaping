@@ -9,7 +9,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { Design, Model } from 'shaping';
-import { cameraPose, modelRadius } from './camera';
+import { cameraPose, framingBox, modelRadius } from './camera';
 import { Scene } from './Scene';
 
 export interface CaptureRequest {
@@ -56,7 +56,7 @@ export const cameraView = (() => {
 function CameraRig({ design, model, resetKey }: { design: Design; model: Model; resetKey: number }) {
   const controls = useRef<React.ComponentRef<typeof OrbitControls>>(null);
   const { camera } = useThree();
-  const b = model.diagnostics.bbox;
+  const b = framingBox(model, design.view);
   const r = modelRadius(b);
   // Move the camera when the view dials change (or on reset), not on every rebuild.
   const v = design.view;
@@ -71,7 +71,7 @@ function CameraRig({ design, model, resetKey }: { design: Design; model: Model; 
     controls.current?.update();
     if (controls.current) cameraView.set(camera, controls.current.target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [v.azimuthDeg, v.elevationDeg, v.camera, resetKey, camera]);
+  }, [v.azimuthDeg, v.elevationDeg, v.camera, v.walls, v.wallGap, resetKey, camera]);
   // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
   const { size } = useThree();
   const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : DEFAULT_FOV_DEG;
@@ -98,8 +98,9 @@ function Capture() {
       frameOverride.set?.({ design, model });
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const target = new THREE.WebGLRenderTarget(width, height, { samples: 4, colorSpace: THREE.SRGBColorSpace });
-      const pose = cameraPose(design.view, model.diagnostics.bbox);
-      const r = modelRadius(model.diagnostics.bbox);
+      const frame = framingBox(model, design.view);
+      const pose = cameraPose(design.view, frame);
+      const r = modelRadius(frame);
       const cam = design.view.camera === 'orthographic'
         ? new THREE.OrthographicCamera((-r * 1.6 * width) / height, (r * 1.6 * width) / height, r * 1.6, -r * 1.6, r / 100, r * 100)
         : new THREE.PerspectiveCamera(35, width / height, r / 100, r * 100);

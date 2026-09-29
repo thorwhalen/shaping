@@ -192,7 +192,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
         {showSlices && regions.filter((x) => x.role === 'slice').map((reg) => <RegionMesh key={reg.id} region={reg} />)}
         {section && <RegionMesh region={section} />}
       </group>
-      {view.ground && (
+      {view.ground && !(view.walls && wallRegions.length) && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[c[0], 0, c[2]]} receiveShadow>
           <planeGeometry args={[r * 12, r * 12]} />
           <shadowMaterial opacity={0.22} />
