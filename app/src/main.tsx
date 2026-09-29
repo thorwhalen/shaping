@@ -9,3 +9,6 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+// Development only: expose the store so the browser checks can drive the app.
+if (import.meta.env.DEV) void import('./state/store').then((m) => Object.assign(window, { __app: m.useApp }));

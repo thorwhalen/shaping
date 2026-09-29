@@ -122,7 +122,7 @@ function MediaSection({ design, model, setOverride, setStatus }: { design: Desig
     const capture = captureRef.current;
     const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
     const geometric = rebuildsGeometry(animation);
-    const at = { ...design, animation };
+    const at = withDefaults(design, animation);
     const frame = async (i: number) => {
       const d = designAt(at, i / animation.fps);
       const m = geometric ? await geometry().build(d, figs, 'frame') : model;
@@ -165,7 +165,7 @@ function MediaSection({ design, model, setOverride, setStatus }: { design: Desig
     if (!model) return;
     const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
     const geometric = rebuildsGeometry(animation);
-    const at = { ...design, animation };
+    const at = withDefaults(design, animation);
     const count = frameCount(animation);
     setProgress(0);
     for (let i = 0; i <= count; i++) {
@@ -226,9 +226,9 @@ function useSweepables(design: Design): Array<{ path: string; title: string; min
     const genre = builtInGenres[design.genre];
     const out: Array<{ path: string; title: string; min: number; max: number }> = [];
     const walk = (schema: unknown, prefix: string) => {
-      const s = schema as { properties?: Record<string, { type?: string; minimum?: number; maximum?: number; title?: string; properties?: object }> };
+      const s = schema as { properties?: Record<string, { type?: string; minimum?: number; maximum?: number; title?: string; sweep?: boolean; properties?: object }> };
       for (const [k, v] of Object.entries(s.properties ?? {})) {
-        if ((v.type === 'number' || v.type === 'integer') && v.minimum !== undefined && v.maximum !== undefined) out.push({ path: prefix + k, title: v.title ?? k, min: v.minimum, max: v.maximum });
+        if ((v.type === 'number' || v.type === 'integer') && v.minimum !== undefined && v.maximum !== undefined) out[v.sweep ? 'unshift' : 'push']({ path: prefix + k, title: v.title ?? k, min: v.minimum, max: v.maximum });
         else if (v.type === 'object' && v.properties) walk(v, `${prefix}${k}.`);
       }
     };
@@ -241,6 +241,11 @@ function useSweepables(design: Design): Array<{ path: string; title: string; min
       return { ...o, min: now, max: to };
     });
   }, [design.genre, design.params]);
+}
+
+/** The design with its genre's defaults written out, so an animation can address any dial. */
+function withDefaults(design: Design, animation: Design['animation']): Design {
+  return { ...design, params: builtInGenres[design.genre].params.parse(design.params) as Record<string, unknown>, animation };
 }
 
 const toJson = (schema: z.ZodType) => z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' });

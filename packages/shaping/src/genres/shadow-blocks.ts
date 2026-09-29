@@ -52,7 +52,7 @@ export const ShadowParams = z.object({
   frame: z.enum(['none', 'border', 'base-bar']).default('none').meta({ title: 'Frame' }),
   frameWidth: z.number().min(0.02).max(0.5).default(0.12).meta({ title: 'Frame width', step: 0.01 }),
   /** Grow every figure outward before intersecting (thin strokes make fragile solids). */
-  thicken: z.number().min(0).max(0.3).default(0).meta({ title: 'Thicken', step: 0.005 }),
+  thicken: z.number().min(0).max(0.3).default(0).meta({ title: 'Thicken', step: 0.005, sweep: true }),
   /** Drop pieces smaller than this share of the largest piece's volume. */
   dropDust: z.number().min(0).max(1).default(0.01).meta({ title: 'Drop small pieces', step: 0.005 }),
   keepLargest: z.boolean().default(false).meta({ title: 'Keep only the largest piece' }),

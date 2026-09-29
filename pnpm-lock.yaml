@@ -25,12 +25,24 @@ importers:
       '@zodal/store-localstorage':
         specifier: ^0.2.0
         version: 0.2.0(@zodal/core@0.2.0(zod@4.6.5))(@zodal/store@0.2.0(zod@4.6.5))
+      fast-png:
+        specifier: ^8.0.0
+        version: 8.0.0
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       gifenc:
         specifier: ^1.0.3
         version: 1.0.3
       immer:
         specifier: ^11.1.18
         version: 11.1.18
+      jpeg-js:
+        specifier: ^0.4.4
+        version: 0.4.4
+      manifold-3d:
+        specifier: 3.5.4
+        version: 3.5.4(@gltf-transform/core@4.5.0)(@gltf-transform/extensions@4.5.0)(@gltf-transform/functions@4.5.0(@types/node@22.20.4))(esbuild-wasm@0.27.7)
       mediabunny:
         specifier: ^1.60.0
         version: 1.60.0

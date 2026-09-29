@@ -6,7 +6,7 @@
 import type { Box3, View } from 'shaping';
 
 /** Distance of the camera from the centre, in multiples of the model's bounding radius. */
-export const CAMERA_DISTANCE = 3.2;
+export const CAMERA_DISTANCE = 4;
 
 export function modelRadius(b: Box3): number {
   const d = [0, 1, 2].map((i) => b.max[i] - b.min[i]);

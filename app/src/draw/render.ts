@@ -17,13 +17,15 @@ export const PAPER = '#ffffff';
  */
 export function drawObject(ctx: CanvasRenderingContext2D, o: DrawObject, height: number) {
   ctx.fillStyle = o.erase ? PAPER : INK;
-  ctx.beginPath();
-  for (const p of objectPolygons(o, height))
+  // One fill per polygon: overlapping pieces of a stroke add up instead of cancelling.
+  for (const p of objectPolygons(o, height)) {
+    ctx.beginPath();
     for (const ring of [p.outer, ...p.holes]) {
       ring.forEach(([x, y], i) => (i ? ctx.lineTo(x, height - y) : ctx.moveTo(x, height - y)));
       ctx.closePath();
     }
-  ctx.fill('nonzero'); // outer rings and holes wind opposite ways; overlapping pieces add up
+    ctx.fill('evenodd');
+  }
 }
 
 /** Clear to white and paint every object, then the optional in-progress one. */

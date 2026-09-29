@@ -20,6 +20,9 @@ import { z } from 'zod';
 /** The table of genres, keyed by id. A plain object: adding a genre is adding an entry. */
 export type GenreTable = Record<string, Genre<any>>;
 
+/** A part that loses more than this share of its volume to earlier parts is reported. */
+const OVERLAP_SHARE = 0.01;
+
 /** Colours given to parts when the design asks for a palette. */
 export const PART_PALETTE = ['#d4763b', '#3b7dd4', '#4caf6d', '#c94f7c', '#e0b43a', '#7a5cc9', '#3aa9b0', '#8a8f3c', '#d45f3b', '#5a6b8c'];
 
@@ -85,9 +88,17 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     // Bodies are disjoint: earlier bodies win, so a multi-colour print has no overlapping volume.
     const bodies: Array<{ partId: string; solid: Solid; color?: string }> = [];
     let taken: Solid | null = null;
+    const trimmed = new Set<string>();
     for (const b of result.bodies) {
       let s = b.solid;
-      if (taken) s = kernel.subtract(s, taken);
+      if (taken) {
+        const before = kernel.volume(s);
+        s = kernel.subtract(s, taken);
+        if (before > 0 && kernel.volume(s) < before * (1 - OVERLAP_SHARE)) {
+          trimmed.add(b.partId);
+          warnings.push(`Part ${b.partId} overlaps earlier parts; the shared volume went to them.`);
+        }
+      }
       if (kernel.isEmpty(s)) continue;
       taken = taken ? kernel.union([taken, s]) : s;
       bodies.push({ ...b, solid: s });
@@ -160,7 +171,7 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     // Original-slice promises: the kernel's cut on the plane should give back the figure.
     for (const promise of result.slices ?? []) {
       const body = bodies.find((b) => b.partId === promise.partId);
-      if (!body) continue;
+      if (!body || trimmed.has(promise.partId)) continue;
       const cut = kernel.slice(kernel.transform(body.solid, promise.toPlane), 0);
       const diff = kernel.union2([kernel.subtract2(cut, promise.target), kernel.subtract2(promise.target, cut)]);
       const ta = kernel.area(promise.target);

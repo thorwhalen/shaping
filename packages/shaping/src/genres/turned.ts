@@ -11,7 +11,7 @@ import { defineGenre, figureBounds, fitFigure, TRANSFORMS, type Region, type Sli
 export const PartTransformSchema = z.object({
   kind: z.enum(['revolve', 'extrude', 'radial']).default('revolve').meta({ title: 'Transform' }),
   // revolve
-  angleDeg: z.number().min(1).max(360).default(360).meta({ title: 'Angle', unit: '°', step: 1, when: { kind: ['revolve'] } }),
+  angleDeg: z.number().min(1).max(360).default(360).meta({ title: 'Angle', unit: '°', step: 1, sweep: true, when: { kind: ['revolve'] } }),
   offset: z.number().min(-2).max(2).default(0).meta({ title: 'Axis offset', step: 0.01, when: { kind: ['revolve'] } }),
   policy: z.enum(['clip', 'both', 'refuse']).default('clip').meta({ title: 'Crossing the axis', when: { kind: ['revolve'] } }),
   segments: z.number().int().min(8).max(256).default(96).meta({ title: 'Segments', when: { kind: ['revolve'] } }),
