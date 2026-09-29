@@ -92,6 +92,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      jpeg-js:
+        specifier: ^0.4.4
+        version: 0.4.4
       manifold-3d:
         specifier: 3.5.4
         version: 3.5.4(@gltf-transform/core@4.5.0)(@gltf-transform/extensions@4.5.0)(@gltf-transform/functions@4.5.0(@types/node@22.20.4))(esbuild-wasm@0.27.7)
@@ -817,6 +820,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
 
   ktx-parse@1.1.0:
     resolution: {integrity: sha512-mKp3y+FaYgR7mXWAbyyzpa/r1zDWeaunH+INJO4fou3hb45XuNSwar+7llrRyvpMWafxSIi99RNFJ05MHedaJQ==}
@@ -1897,6 +1903,8 @@ snapshots:
       - '@types/react'
 
   jiti@2.7.0: {}
+
+  jpeg-js@0.4.4: {}
 
   ktx-parse@1.1.0: {}
 
