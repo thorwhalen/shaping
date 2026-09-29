@@ -227,13 +227,13 @@ describe('resolvers', () => {
   });
 
   it('defaultResolvers.image reads a data: PNG URL', async () => {
-    const fig = await defaultResolvers.image!({ kind: 'image', src: dataUrl(png(paint(300, 300, onWhite(disc(150, 150, 100))))) }, prep());
+    const fig = await defaultResolvers.image!({ kind: 'image', src: dataUrl(png(paint(300, 300, onWhite(disc(150, 150, 100))))) }, prep(), { kernel: await manifoldKernel() });
     expect(fig.parts).toHaveLength(1);
     expect(Math.abs(areaOf(fig) / (Math.PI * 100 ** 2) - 1)).toBeLessThan(0.01);
   });
 
   it('idb: keys need the app to supply a loader, with a message that says so', async () => {
-    await expect(defaultResolvers.image!({ kind: 'image', src: 'idb:abc' }, prep())).rejects.toThrow(/loadBytes/);
+    await expect(defaultResolvers.image!({ kind: 'image', src: 'idb:abc' }, prep(), { kernel: await manifoldKernel() })).rejects.toThrow(/loadBytes/);
   });
 
   it('builds end to end: an image source in a turned design', async () => {

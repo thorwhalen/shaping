@@ -134,13 +134,13 @@ export const StyleSchema = z.object({
 export const ViewSchema = z.object({
   camera: z.enum(['perspective', 'orthographic']).default('perspective'),
   /** Camera azimuth and elevation, in degrees. Animatable. */
-  azimuthDeg: z.number().default(35).meta({ title: 'Azimuth', unit: '°' }),
+  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ title: 'Azimuth', unit: '°' }),
   elevationDeg: z.number().min(-89).max(89).default(25).meta({ title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
   walls: z.boolean().default(true).meta({ title: 'Shadow walls' }),
   ground: z.boolean().default(true).meta({ title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
-  lightAzimuthDeg: z.number().default(45).meta({ title: 'Light azimuth', unit: '°' }),
+  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ title: 'Light azimuth', unit: '°' }),
   lightElevationDeg: z.number().min(0).max(90).default(55).meta({ title: 'Light elevation', unit: '°' }),
   lightIntensity: z.number().min(0).max(6).default(2.2).meta({ title: 'Light', step: 0.1 }),
   lightColor: z.string().default('#ffffff').meta({ title: 'Light colour' }),
