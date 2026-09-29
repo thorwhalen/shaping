@@ -6,14 +6,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_PROFILE, liveChecks, PROFILES, type Design, type Model } from 'shaping';
 import { EXAMPLES, Gallery } from './Gallery';
+import { Notices } from './persist/Notices';
+import { useSharedLink } from './persist/useSharedLink';
 import { GenrePanel } from './panels/GenrePanel';
 import { LookPanel } from './panels/LookPanel';
 import { OutputPanel } from './panels/OutputPanel';
 import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
-import { cameFromApp, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
+import { cameFromApp, DEFAULT_PANEL, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
+import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
+import { ShareMenu } from './persist/ShareMenu';
+
+/** An angle in (-180, 180]. */
+const wrapDegrees = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
 const PANELS = [
   { id: 'source', label: 'Source' },
@@ -55,9 +62,20 @@ export function App() {
     setRoute(r);
   }, [open]);
 
-  if (!route.design || !design) return route.design ? <Loading /> : <Gallery onOpen={openDesign} />;
-  return (
+  // A shared link (?s=) lands here: save the copy, then replace the link's address with the copy's own.
+  useSharedLink((d) =>
+    void designs.save(d).then(() => {
+      const r = { design: d.id, panel: DEFAULT_PANEL };
+      replaceRoute(r);
+      setRoute(r);
+    }),
+  );
+
+  const screen = !route.design || !design ? (
+    route.design ? <Loading /> : <Gallery onOpen={openDesign} />
+  ) : (
     <Editor
+      onOpenDesign={openDesign}
       panel={route.panel}
       setPanel={(panel) => {
         const r = { ...route, panel };
@@ -72,13 +90,19 @@ export function App() {
       }}
     />
   );
+  return (
+    <>
+      {screen}
+      <Notices />
+    </>
+  );
 }
 
 function Loading() {
   return <div className="grid h-full place-items-center text-muted">Opening…</div>;
 }
 
-function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: string) => void; onBack: () => void }) {
+function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setPanel: (p: string) => void; onBack: () => void; onOpenDesign: (d: Design) => void }) {
   const design = useApp((s) => s.design)!;
   const model = useApp((s) => s.model);
   const busy = useApp((s) => s.busy);
@@ -88,6 +112,15 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
   const [resetKey, setResetKey] = useState(0);
   const [showSlices, setShowSlices] = useState(false);
   const [override, setOverride] = useState<{ design: Design; model: Model } | null>(null);
+  const setLight = useCallback(
+    (az: number, el: number) =>
+      edit((d) => {
+        d.view.lightAzimuthDeg = wrapDegrees(az);
+        d.view.lightElevationDeg = el;
+      }),
+    [edit],
+  );
+  const shiftDrag = useShiftDragLight(design.view, setLight);
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -97,6 +130,7 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
             ←
           </button>
           <input aria-label="Title" className="min-w-0 flex-1 rounded bg-transparent px-1 font-medium hover:bg-white focus:bg-white" value={design.title} onChange={(e) => edit((d) => void (d.title = e.target.value))} />
+          <ShareMenu design={design} onOpenDesign={onOpenDesign} />
         </div>
         <nav className="flex border-b border-line" role="tablist">
           {PANELS.map((p) => (
@@ -112,10 +146,11 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
           {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} setOverride={setOverride} />}
         </div>
       </aside>
-      <main className="relative min-h-[50vh] flex-1">
+      <main className="relative min-h-[50vh] flex-1" {...shiftDrag}>
         <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
+          <LightBall view={design.view} onChange={setLight} />
         </Viewer>
         <StatusBar model={model} error={error} profileId={profileId} />
       </main>

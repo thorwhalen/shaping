@@ -10,6 +10,7 @@ import { buildFromFigures, manifoldKernel, sourceToFigure, type Kernel } from 's
 import { genres } from '../genres';
 import { exportModel } from 'shaping/export';
 import { decodeImage, makeResolvers, prepareMask } from 'shaping/imaging';
+import { fontProvider } from '../fonts/provider';
 import { getBlob, isBlobRef } from '../lib/blobs';
 import type { Request, Response } from './protocol';
 
@@ -17,6 +18,15 @@ let kernelPromise: Promise<Kernel> | null = null;
 const kernel = () => (kernelPromise ??= manifoldKernel({ wasmUrl }));
 
 async function loadBytes(src: string): Promise<{ bytes: Uint8Array; mediaType?: string }> {
+  if (src.startsWith('ask:')) {
+    let host = src;
+    try {
+      host = new URL(src.slice(4)).host;
+    } catch {
+      /* keep the raw value */
+    }
+    throw new Error(`This design loads its image from ${host}. Nothing is fetched until you allow it: see "Load image" in the Source panel.`);
+  }
   if (isBlobRef(src)) {
     const b = await getBlob(src);
     return { bytes: b.bytes, mediaType: b.mediaType };
@@ -25,7 +35,7 @@ async function loadBytes(src: string): Promise<{ bytes: Uint8Array; mediaType?: 
   if (!res.ok) throw new Error(`Could not load ${src}: ${res.status}`);
   return { bytes: new Uint8Array(await res.arrayBuffer()), mediaType: res.headers.get('content-type') ?? undefined };
 }
-const resolvers = makeResolvers({ loadBytes });
+const resolvers = { ...makeResolvers({ loadBytes }), loadFont: (id: string) => fontProvider().load(id) };
 
 const post = (r: Response, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
 
@@ -80,7 +90,10 @@ async function pump() {
 }
 
 self.onmessage = (ev: MessageEvent<Request>) => {
-  pending.set(keyOf(ev.data), ev.data);
+  const key = keyOf(ev.data);
+  const replaced = pending.get(key);
+  if (replaced) post({ kind: 'dropped', id: replaced.id });
+  pending.set(key, ev.data);
   void pump();
 };
 

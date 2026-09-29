@@ -9,7 +9,7 @@
  * The default implementation is Manifold (`manifoldKernel`). A replacement, such as one on
  * OpenCascade for true STEP export, implements this interface and is passed as `kernel`.
  */
-import type { Box3, Polygon, Vec2, Vec3 } from '../types.js';
+import type { Box3, Polygon, Ring, Vec2, Vec3 } from '../types.js';
 
 declare const regionBrand: unique symbol;
 declare const solidBrand: unique symbol;
@@ -45,6 +45,9 @@ export interface RevolveOptions {
   segments?: number;
 }
 
+/** How overlapping and nested contours combine into an area (as in SVG and PDF). */
+export type FillRule = 'nonzero' | 'evenodd';
+
 export type JoinType = 'round' | 'miter' | 'square';
 
 /** An indexed triangle mesh as plain typed arrays. */
@@ -66,6 +69,11 @@ export interface Kernel {
   // ---- 2D
   /** Build a clean region from polygons (union with the non-zero rule, holes respected). */
   region(polygons: Polygon[]): Region;
+  /**
+   * Build a region from raw contours taken together, filled by `rule` (default `nonzero`). Font
+   * outlines and SVG paths are contours whose winding, not their nesting, tells outer from hole.
+   */
+  contours(rings: Ring[], rule?: FillRule): Region;
   polygons(r: Region): Polygon[];
   area(r: Region): number;
   bounds2(r: Region): { min: Vec2; max: Vec2 };

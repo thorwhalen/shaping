@@ -10,7 +10,13 @@
  */
 import { z } from 'zod';
 
-export const DESIGN_VERSION = 1 as const;
+/**
+ * Version of the Design document. Older versions are migrated on the way in (see `migrateDesign`),
+ * so saved work, shared links and files keep meaning what they meant.
+ * - 2 (2026-09-29): a text source's `round` became a share of the stroke's half-width (was a radius
+ *   in cells) and rounds concave corners too.
+ */
+export const DESIGN_VERSION = 2 as const;
 
 const vec2 = z.tuple([z.number(), z.number()]);
 const ring = z.array(vec2);
@@ -32,13 +38,32 @@ export const ShapeSourceSchema = z.object({
 });
 
 /** Text set in the built-in block font: each glyph is a union of cells, so letters are exact polygons. */
+/** Id of the built-in block font; any other font id names a font in the font catalog. */
+export const BLOCK_FONT = 'block';
+
+/** A stretch of text in one font (with its variable-font axis values). */
+export const TextRunSchema = z.object({
+  text: z.string().min(1).max(64),
+  font: z.string().optional(),
+  axes: z.record(z.string(), z.number()).optional(),
+});
+
+/**
+ * Text as a figure: in the built-in block font (exact polygons, no loading) or in any font of the
+ * catalog (outlines of the glyphs, loaded on demand). Several fonts in one text: give `runs`; a
+ * run without its own font or axes uses the source's.
+ */
 export const TextSourceSchema = z.object({
   kind: z.literal('text'),
-  text: z.string().min(1).max(24),
-  /** Rounds the corners of the cells, as a fraction of a cell. */
-  round: z.number().min(0).max(0.5).default(0),
-  /** Gap between glyphs, in cells. */
-  spacing: z.number().min(0).max(3).default(1),
+  text: z.string().min(1).max(64),
+  font: z.string().default(BLOCK_FONT).meta({ title: 'Font' }),
+  /** Variable-font axis values, by axis tag (e.g. `{ wght: 700 }`). Ignored by static fonts. */
+  axes: z.record(z.string(), z.number()).default({}),
+  runs: z.array(TextRunSchema).optional(),
+  /** Rounds every corner, convex and concave: 0 is sharp, 1 rounds a stroke's tip completely. */
+  round: z.number().min(0).max(1).default(0).meta({ title: 'Round', step: 0.01 }),
+  /** Extra gap between glyphs: in cells for the block font, in tenths of an em for other fonts. */
+  spacing: z.number().min(-1).max(3).default(1).meta({ title: 'Spacing', step: 0.05 }),
 });
 
 /** A figure given as polygons (vector data, already parsed). */
@@ -119,31 +144,37 @@ export const PrepareSchema = z.object({
 export const MATERIAL_PRESETS = ['matte', 'glossy', 'brushed-metal', 'polished-metal', 'glass', 'resin'] as const;
 
 export const StyleSchema = z.object({
-  material: z.enum(MATERIAL_PRESETS).default('glossy').meta({ title: 'Material' }),
+  material: z.enum(MATERIAL_PRESETS).default('glossy').meta({ render: true, title: 'Material' }),
   color: z.string().default('#d4763b').meta({ title: 'Colour' }),
   /** Colour per part id; parts not listed use `color` or the palette. */
   partColors: z.record(z.string(), z.string()).default({}),
   /** Use a distinct palette colour per part when no colour is given. */
   palette: z.boolean().default(true).meta({ title: 'Colour parts' }),
-  opacity: z.number().min(0.05).max(1).default(1).meta({ title: 'Opacity', step: 0.05 }),
-  roughness: z.number().min(0).max(1).nullable().default(null).meta({ title: 'Roughness', step: 0.05 }),
-  metalness: z.number().min(0).max(1).nullable().default(null).meta({ title: 'Metalness', step: 0.05 }),
-  background: z.string().default('#f4f1ea').meta({ title: 'Background' }),
+  opacity: z.number().min(0.05).max(1).default(1).meta({ render: true, title: 'Opacity', step: 0.05 }),
+  roughness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Roughness', step: 0.05 }),
+  metalness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Metalness', step: 0.05 }),
+  background: z.string().default('#f4f1ea').meta({ render: true, title: 'Background' }),
 });
 
 export const ViewSchema = z.object({
-  camera: z.enum(['perspective', 'orthographic']).default('perspective'),
+  camera: z.enum(['perspective', 'orthographic']).default('perspective').meta({ render: true }),
   /** Camera azimuth and elevation, in degrees. Animatable. */
-  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ title: 'Azimuth', unit: '°' }),
-  elevationDeg: z.number().min(-89).max(89).default(25).meta({ title: 'Elevation', unit: '°' }),
+  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ render: true, title: 'Azimuth', unit: '°' }),
+  elevationDeg: z.number().min(-89).max(89).default(25).meta({ render: true, title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
-  walls: z.boolean().default(true).meta({ title: 'Shadow walls' }),
-  ground: z.boolean().default(true).meta({ title: 'Ground shadow' }),
+  walls: z.boolean().default(true).meta({ render: true, title: 'Shadow walls' }),
+  /** Distance of the shadow walls from the object, as a share of its size. */
+  wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { walls: [true] } }),
+  ground: z.boolean().default(true).meta({ render: true, title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
-  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ title: 'Light azimuth', unit: '°' }),
-  lightElevationDeg: z.number().min(0).max(90).default(55).meta({ title: 'Light elevation', unit: '°' }),
-  lightIntensity: z.number().min(0).max(6).default(2.2).meta({ title: 'Light', step: 0.1 }),
-  lightColor: z.string().default('#ffffff').meta({ title: 'Light colour' }),
+  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ render: true, title: 'Light azimuth', unit: '°' }),
+  lightElevationDeg: z.number().min(0).max(90).default(55).meta({ render: true, title: 'Light elevation', unit: '°' }),
+  lightIntensity: z.number().min(0).max(6).default(2.2).meta({ render: true, title: 'Light', step: 0.1 }),
+  lightColor: z.string().default('#ffffff').meta({ render: true, title: 'Light colour' }),
+  /** Light that comes from everywhere (fills the shadows). Low, so the sun dominates. */
+  fillIntensity: z.number().min(0).max(2).default(0.25).meta({ render: true, title: 'Fill light', step: 0.05 }),
+  /** Strength of the studio reflections, which turn with the sun. */
+  environmentIntensity: z.number().min(0).max(2).default(0.45).meta({ render: true, title: 'Reflections', step: 0.05 }),
   /** Clip the solid with a plane and show the kernel's slice on it. */
   section: z.boolean().default(false).meta({ title: 'Section' }),
   sectionOffset: z.number().min(-1).max(1).default(0).meta({ title: 'Section position', step: 0.01 }),
@@ -183,7 +214,7 @@ export const AnimationSchema = z.object({
 
 // ---------------------------------------------------------------- the design
 
-export const DesignSchema = z.object({
+export const DesignObjectSchema = z.object({
   version: z.literal(DESIGN_VERSION),
   id: z.string().min(1),
   title: z.string().default('Untitled'),
@@ -204,6 +235,7 @@ export const DesignSchema = z.object({
 });
 
 export type Source = z.infer<typeof SourceSchema>;
+export type SourceInput = z.input<typeof SourceSchema>;
 export type ShapeSource = z.infer<typeof ShapeSourceSchema>;
 export type TextSource = z.infer<typeof TextSourceSchema>;
 export type ImageSource = z.infer<typeof ImageSourceSchema>;
@@ -215,8 +247,46 @@ export type Style = z.infer<typeof StyleSchema>;
 export type View = z.infer<typeof ViewSchema>;
 export type FlatAction = z.infer<typeof FlatActionSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
-export type Design = z.infer<typeof DesignSchema>;
-export type DesignInput = z.input<typeof DesignSchema>;
+/** In version 1 a block-text `round` was a radius in cells (0..0.5); it is now a share of the half-stroke. */
+const V1_ROUND_TO_V2 = 1 / (0.5 * 0.98);
+
+/** Bring an older Design document up to the current version. Unknown shapes pass through to validation. */
+export function migrateDesign(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const d = input as { version?: unknown; sources?: Record<string, { kind?: string; round?: number }> };
+  if (d.version !== 1) return input;
+  const sources = Object.fromEntries(
+    Object.entries(d.sources ?? {}).map(([k, src]) =>
+      src?.kind === 'text' && typeof src.round === 'number' ? [k, { ...src, round: Math.min(1, src.round * V1_ROUND_TO_V2) }] : [k, src],
+    ),
+  );
+  return { ...d, version: 2, sources };
+}
+
+/** The Design schema, accepting older versions (migrated first). */
+export const DesignSchema = z.preprocess(migrateDesign, DesignObjectSchema);
+
+export type Design = z.infer<typeof DesignObjectSchema>;
+export type DesignInput = z.input<typeof DesignObjectSchema>;
+
+/** Keys of an object schema whose fields carry `.meta({ render: true })`: display only, never geometry. */
+function renderOnlyKeys(schema: z.ZodObject<z.ZodRawShape>): string[] {
+  return Object.entries(schema.shape)
+    .filter(([, f]) => (z.globalRegistry.get(f as z.ZodType) as { render?: boolean } | undefined)?.render)
+    .map(([k]) => k);
+}
+const RENDER_VIEW = renderOnlyKeys(ViewSchema);
+const RENDER_STYLE = renderOnlyKeys(StyleSchema);
+const omit = (o: Record<string, unknown>, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
+
+/**
+ * Everything in a design that can change its Model, as a string: two designs with the same key
+ * build the same Model. Fields tagged `render` in the schema (camera, light, material) are left out,
+ * so turning them never triggers a rebuild. A test guards the tags against `build` reading them.
+ */
+export function buildKey(d: Design): string {
+  return JSON.stringify([d.genre, d.sources, d.prepare, d.params, d.sizeMm, omit(d.view, RENDER_VIEW), omit(d.style, RENDER_STYLE)]);
+}
 
 /** Format a Zod error so it names the field: `sources.x.kind: Invalid input`. */
 export function formatIssues(error: z.ZodError): string {

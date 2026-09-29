@@ -1,14 +1,16 @@
 /**
- * Sources: what each slot of the genre is made from — a built-in shape, block text, an uploaded
+ * Sources: what each slot of the genre is made from — a built-in shape, text (any open font), an uploaded
  * image (with the threshold and tuning dials and a live mask preview that marks thin regions), an
  * SVG, or a drawing. Changing a dial re-runs from the original image, never from a previous result.
  */
 import { useEffect, useRef, useState } from 'react';
-import { BLOCK_FONT_CHARS, DrawingSourceSchema, PrepareSchema, prepareParams, PROFILES, setPrepare, setSource, ShapeSourceSchema, TextSourceSchema, type Design, type Source } from 'shaping';
+import { DrawingSourceSchema, PrepareSchema, prepareParams, PROFILES, setPrepare, setSource, ShapeSourceSchema, TextSourceSchema, type Design, type Source } from 'shaping';
 import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
 import { DrawingCanvas } from '../draw';
+import { TextSourceEditor } from '../fonts';
 import { putBlob } from '../lib/blobs';
+import { heldUrl, hostOf, isHeldRemote } from '../persist/incoming';
 import { useApp } from '../state/store';
 import { geometry } from '../worker/client';
 import type { MaskPreview } from '../worker/protocol';
@@ -109,24 +111,7 @@ export function SourcePanel({ profileId }: { profileId: string }) {
         <Dials schema={ShapeSourceSchema} value={source} exclude={['kind']} onChange={(path, v) => update((d) => setSource(d, slot.id, { ...source, [path]: v } as Source))} />
       )}
 
-      {source.kind === 'text' && (
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Text
-            <input
-              className="rounded border border-line bg-white px-2 py-1 font-mono text-lg uppercase"
-              value={source.text}
-              maxLength={24}
-              onChange={(e) => {
-                const text = [...e.target.value.toUpperCase()].filter((c) => BLOCK_FONT_CHARS.includes(c)).join('');
-                if (text) update((d) => setSource(d, slot.id, { ...source, text }));
-              }}
-            />
-            <span className="text-xs text-muted">Block letters A–Z, digits and a few signs.</span>
-          </label>
-          <Dials schema={TextSourceSchema} value={source} exclude={['kind', 'text']} onChange={(path, v) => update((d) => setSource(d, slot.id, { ...source, [path]: v } as Source))} />
-        </div>
-      )}
+      {source.kind === 'text' && <TextSourceEditor value={source} onChange={(next) => update((d) => setSource(d, slot.id, next))} />}
 
       {(source.kind === 'image' || source.kind === 'svg') && (
         <div className="flex flex-col gap-2">
@@ -136,7 +121,15 @@ export function SourcePanel({ profileId }: { profileId: string }) {
               Replace…
             </button>
           </div>
-          {source.kind === 'image' && <ImageTuning design={design} slot={slot.id} src={source.src} profileId={profileId} />}
+          {source.kind === 'image' && isHeldRemote(source.src) && (
+            <div role="alert" className="flex flex-col gap-1 rounded border border-amber-700 px-2 py-1.5 text-xs text-amber-900">
+              This design loads its image from {hostOf(heldUrl(source.src))}. Nothing has been fetched yet.
+              <button className="self-start rounded border border-line bg-white px-2 py-0.5 hover:border-muted" onClick={() => update((d) => setSource(d, slot.id, { ...source, src: heldUrl(source.src) }))}>
+                Load image from {hostOf(heldUrl(source.src))}
+              </button>
+            </div>
+          )}
+          {source.kind === 'image' && !isHeldRemote(source.src) && <ImageTuning design={design} slot={slot.id} src={source.src} profileId={profileId} />}
         </div>
       )}
 

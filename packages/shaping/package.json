@@ -51,6 +51,10 @@
       "types": "./dist/imaging/index.d.ts",
       "default": "./dist/imaging/index.js"
     },
+    "./fonts": {
+      "types": "./dist/fonts/index.d.ts",
+      "default": "./dist/fonts/index.js"
+    },
     "./animate": {
       "types": "./dist/animate/index.d.ts",
       "default": "./dist/animate/index.js"
@@ -70,7 +74,9 @@
     "fflate": "^0.8.3",
     "jpeg-js": "^0.4.4",
     "manifold-3d": "3.5.4",
+    "opentype.js": "2.0.0",
     "perfect-freehand": "^1.2.3",
+    "woff2-encoder": "2.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

@@ -163,6 +163,10 @@ export async function manifoldKernel(opts: LoadManifoldOptions = {}): Promise<Ke
       const parts = valid.map(polygonToCs);
       return (parts.length === 1 ? parts[0] : track(CrossSection.union(parts))) as unknown as Region;
     },
+    contours(rings, rule = 'nonzero') {
+      const valid = rings.filter((r) => r.length >= 3);
+      return R(new CrossSection(valid, rule === 'nonzero' ? 'NonZero' : 'EvenOdd'));
+    },
     polygons(r) {
       return cs(r)
         .decompose()

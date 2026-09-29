@@ -59,3 +59,8 @@ Pointer events, with pointer capture, coalesced events and pressure. A stroke is
 ## Testing
 
 Figures are generated in the test: a disc, a ring, two blobs, a bar of known width. Assert area, hole count, part count and width. No image files in the repository.
+
+## Text in outline fonts
+
+Text sources whose `font` is not `block` (or whose `runs` mix fonts) go through `packages/shaping/src/fonts/` (the `shaping/fonts` entry), not the raster stages. Glyph contours are flattened adaptively, filled with the non-zero rule by `kernel.contours`, one part per glyph, in ems, y up. `round` is `roundRegion` on the glyph, so it works for every font. Fonts arrive through `SourceResolvers.loadFont` (default: Fontsource; the app wraps it in an IndexedDB cache). Research and the choice of parser: `docs/research/fonts.md`. Tests use the tiny variable font in `src/__tests__/fixtures/`, never the network.
+

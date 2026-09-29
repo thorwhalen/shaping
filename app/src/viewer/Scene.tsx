@@ -23,6 +23,11 @@ export const REGION_STYLE = {
   section: { color: '#e0b43a', opacity: 0.95 },
 } as const;
 
+/** Share of the fill light given to the ambient term (the rest is the sky/ground hemisphere). */
+const AMBIENT_SHARE_OF_FILL = 0.5;
+/** Pushes shadow lookups off curved inner walls, against speckled self-shadowing. */
+const SHADOW_NORMAL_BIAS_PER_RADIUS = 0.004;
+
 /** Model (x, y, z; z up) to scene (x, z, -y; y up). */
 const Z_UP_TO_Y_UP = new THREE.Euler(-Math.PI / 2, 0, 0);
 
@@ -140,6 +145,8 @@ export interface SceneProps {
 
 export function Scene({ design, model, dimmed = false, showSlices = false }: SceneProps) {
   const view = design.view;
+  // The sun aims at the model's centre (by default a directional light aims at the origin).
+  const sunTarget = useMemo(() => new THREE.Object3D(), []);
   const b = model.diagnostics.bbox;
   const r = modelRadius(b);
   const c = modelCentre(b);
@@ -152,20 +159,23 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
 
   return (
     <>
-      <ambientLight intensity={0.35} />
-      <hemisphereLight args={['#ffffff', '#d8cfc0', 0.6]} />
+      <ambientLight intensity={view.fillIntensity * AMBIENT_SHARE_OF_FILL} />
+      <hemisphereLight args={['#ffffff', '#d8cfc0', view.fillIntensity]} />
+      <primitive object={sunTarget} position={c} />
       <directionalLight
+        target={sunTarget}
         position={[c[0] + light[0] * r * 4, c[1] + light[1] * r * 4, c[2] + light[2] * r * 4]}
         intensity={view.lightIntensity}
         color={view.lightColor}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-r * 3}
-        shadow-camera-right={r * 3}
-        shadow-camera-top={r * 3}
-        shadow-camera-bottom={-r * 3}
+        shadow-camera-left={-r * 4}
+        shadow-camera-right={r * 4}
+        shadow-camera-top={r * 4}
+        shadow-camera-bottom={-r * 4}
         shadow-camera-far={r * 12}
         shadow-bias={-0.0004}
+        shadow-normalBias={r * SHADOW_NORMAL_BIAS_PER_RADIUS}
       />
       <group rotation={Z_UP_TO_Y_UP}>
         <group visible>
@@ -182,7 +192,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
         {showSlices && regions.filter((x) => x.role === 'slice').map((reg) => <RegionMesh key={reg.id} region={reg} />)}
         {section && <RegionMesh region={section} />}
       </group>
-      {view.ground && (
+      {view.ground && !(view.walls && wallRegions.length) && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[c[0], 0, c[2]]} receiveShadow>
           <planeGeometry args={[r * 12, r * 12]} />
           <shadowMaterial opacity={0.22} />

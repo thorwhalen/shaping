@@ -1,11 +1,26 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "radial-cross",
   "title": "Radial heart",
   "description": "A heart, arrayed six times about its centre line: every copy is the original figure.",
   "genre": "turned",
-  "sources": { "figure": { "kind": "shape", "shape": "heart" } },
-  "params": { "transform": { "kind": "radial", "count": 6, "thickness": 0.1, "spanDeg": 180 } },
+  "sources": {
+    "figure": {
+      "kind": "shape",
+      "shape": "heart"
+    }
+  },
+  "params": {
+    "transform": {
+      "kind": "radial",
+      "count": 6,
+      "thickness": 0.1,
+      "spanDeg": 180
+    }
+  },
   "sizeMm": 50,
-  "style": { "material": "resin", "color": "#c94f7c" }
+  "style": {
+    "material": "resin",
+    "color": "#c94f7c"
+  }
 }
