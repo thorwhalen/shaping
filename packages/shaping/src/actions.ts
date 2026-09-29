@@ -4,7 +4,7 @@
  * one later is an addition, not a rewrite.
  */
 import type { GenreTable } from './build.js';
-import { DESIGN_VERSION, parseDesign, type Design, type Source } from './design.js';
+import { DESIGN_VERSION, parseDesign, type Design, type Source, type SourceInput } from './design.js';
 
 const randomId = () => Math.random().toString(36).slice(2, 10);
 
@@ -12,7 +12,7 @@ const randomId = () => Math.random().toString(36).slice(2, 10);
 export function newDesign(genreId: string, genres: GenreTable, { id = randomId(), title }: { id?: string; title?: string } = {}): Design {
   const genre = genres[genreId];
   if (!genre) throw new Error(`Unknown genre "${genreId}". Available: ${Object.keys(genres).join(', ')}`);
-  const fallback: Source = { kind: 'shape', shape: 'circle', n: 5, ratio: 0.5 };
+  const fallback: SourceInput = { kind: 'shape', shape: 'circle' };
   const sources = Object.fromEntries(genre.slots.map((s) => [s.id, genre.starter?.[s.id] ?? fallback]));
   return parseDesign({ version: DESIGN_VERSION, id, title: title ?? genre.title, genre: genreId, sources, params: {} });
 }

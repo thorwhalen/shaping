@@ -8,6 +8,7 @@
 import type { DrawingSource, ImageSource, PrepareParams, ShapeSource, Source, SvgSource, TextSource } from '../design.js';
 import type { Kernel } from '../kernel/types.js';
 import type { Figure, Polygon, Ring, Vec2 } from '../types.js';
+import { roundRegion } from '../figure.js';
 import { GLYPH_HEIGHT, GLYPH_WIDTH, glyphCells } from './blockfont.js';
 
 /** What a resolver may use. `kernel` handles are valid only inside `kernel.scope`. */
@@ -25,6 +26,10 @@ export interface SourceResolvers {
 }
 
 const TAU = Math.PI * 2;
+/** Half the width of a block-font stroke, in cells. */
+const BLOCK_STROKE_HALF_WIDTH = 0.5;
+/** Keeps the largest rounding just under half a stroke, so a stroke never vanishes when shrunk. */
+const ROUND_SAFETY = 0.98;
 
 /** Points of a circle, counter-clockwise. */
 export function circleRing(r: number, n = 96, cx = 0, cy = 0): Ring {
@@ -97,10 +102,9 @@ export function textFigure(s: Pick<TextSource, 'text' | 'spacing'>, kernel?: Ker
     }));
     polygons.push(...diagonalBridges(cells, i * pitch));
     if (kernel && round > 0) {
-      polygons = kernel.scope(() => {
-        const reg = kernel.region(polygons);
-        return kernel.polygons(kernel.offset2(kernel.offset2(reg, -round, 'round'), round, 'round'));
-      });
+      // A stroke is one cell wide, so round = 1 means a radius of half a cell: a fully round tip.
+      const radius = round * BLOCK_STROKE_HALF_WIDTH * ROUND_SAFETY;
+      polygons = kernel.scope(() => kernel.polygons(roundRegion(kernel, kernel.region(polygons), radius)));
     }
     parts.push({ id: `${ch}${i}`, polygons });
   });

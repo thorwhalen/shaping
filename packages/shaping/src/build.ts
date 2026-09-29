@@ -69,7 +69,7 @@ export async function resolveFigures(design: Design, opts: ResolveFiguresOptions
 /** Build a model from already-resolved figures. Synchronous: this is what runs on every dial move. */
 export function buildFromFigures(design: Design, figures: Record<string, Figure>, opts: BuildFromFiguresOptions): Model {
   const { kernel } = opts;
-  const wallGap = opts.wallGap ?? 0.25;
+  const wallGap = opts.wallGap ?? design.view.wallGap;
   const extraTolerance = opts.extraTolerance ?? 1e-3;
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
   const genre = getGenre(opts.genres, design.genre);

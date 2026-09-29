@@ -32,13 +32,32 @@ export const ShapeSourceSchema = z.object({
 });
 
 /** Text set in the built-in block font: each glyph is a union of cells, so letters are exact polygons. */
+/** Id of the built-in block font; any other font id names a font in the font catalog. */
+export const BLOCK_FONT = 'block';
+
+/** A stretch of text in one font (with its variable-font axis values). */
+export const TextRunSchema = z.object({
+  text: z.string().min(1).max(64),
+  font: z.string().optional(),
+  axes: z.record(z.string(), z.number()).optional(),
+});
+
+/**
+ * Text as a figure: in the built-in block font (exact polygons, no loading) or in any font of the
+ * catalog (outlines of the glyphs, loaded on demand). Several fonts in one text: give `runs`; a
+ * run without its own font or axes uses the source's.
+ */
 export const TextSourceSchema = z.object({
   kind: z.literal('text'),
-  text: z.string().min(1).max(24),
-  /** Rounds the corners of the cells, as a fraction of a cell. */
-  round: z.number().min(0).max(0.5).default(0),
-  /** Gap between glyphs, in cells. */
-  spacing: z.number().min(0).max(3).default(1),
+  text: z.string().min(1).max(64),
+  font: z.string().default(BLOCK_FONT).meta({ title: 'Font' }),
+  /** Variable-font axis values, by axis tag (e.g. `{ wght: 700 }`). Ignored by static fonts. */
+  axes: z.record(z.string(), z.number()).default({}),
+  runs: z.array(TextRunSchema).optional(),
+  /** Rounds every corner, convex and concave: 0 is sharp, 1 rounds a stroke's tip completely. */
+  round: z.number().min(0).max(1).default(0).meta({ title: 'Round', step: 0.01 }),
+  /** Extra gap between glyphs: in cells for the block font, in tenths of an em for other fonts. */
+  spacing: z.number().min(-1).max(3).default(1).meta({ title: 'Spacing', step: 0.05 }),
 });
 
 /** A figure given as polygons (vector data, already parsed). */
@@ -138,6 +157,8 @@ export const ViewSchema = z.object({
   elevationDeg: z.number().min(-89).max(89).default(25).meta({ title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
   walls: z.boolean().default(true).meta({ title: 'Shadow walls' }),
+  /** Distance of the shadow walls from the object, as a share of its size. */
+  wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { walls: [true] } }),
   ground: z.boolean().default(true).meta({ title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
   lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ title: 'Light azimuth', unit: '°' }),
@@ -204,6 +225,7 @@ export const DesignSchema = z.object({
 });
 
 export type Source = z.infer<typeof SourceSchema>;
+export type SourceInput = z.input<typeof SourceSchema>;
 export type ShapeSource = z.infer<typeof ShapeSourceSchema>;
 export type TextSource = z.infer<typeof TextSourceSchema>;
 export type ImageSource = z.infer<typeof ImageSourceSchema>;

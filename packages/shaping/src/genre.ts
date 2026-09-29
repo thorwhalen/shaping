@@ -72,7 +72,7 @@ export interface Genre<P = Record<string, unknown>> {
   description: string;
   slots: Slot[];
   /** Sources a new design of this genre starts with, per slot, so it opens on something that works. */
-  starter?: Record<string, import('./design.js').Source>;
+  starter?: Record<string, import('./design.js').SourceInput>;
   /** The dials, with defaults. The dials panel is generated from this schema. */
   params: z.ZodType<P>;
   /**

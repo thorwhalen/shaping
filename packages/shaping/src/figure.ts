@@ -71,6 +71,17 @@ export function figureArea(f: Figure): number {
   return a;
 }
 
+/**
+ * Round every corner of a region with radius `radius`: convex corners by an opening (shrink, then
+ * grow) and concave corners by a closing (grow, then shrink). A radius of half a stroke's width
+ * rounds its tip completely. Must run inside a kernel scope.
+ */
+export function roundRegion(kernel: Kernel, r: Region, radius: number): Region {
+  if (radius <= 0) return r;
+  const opened = kernel.offset2(kernel.offset2(r, -radius, 'round'), radius, 'round');
+  return kernel.offset2(kernel.offset2(opened, radius, 'round'), -radius, 'round');
+}
+
 /** The union of all parts as one region. Must run inside a kernel scope. */
 export function figureRegion(kernel: Kernel, f: Figure): Region {
   return kernel.region(f.parts.flatMap((p) => p.polygons));
