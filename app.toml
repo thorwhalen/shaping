@@ -1,0 +1,16 @@
+# shaping — turn 2D figures into 3D objects (pure frontend; no Python backend).
+# The Vite build of app/ lands in app/dist; enlace mounts it at /shaping/.
+display_name = "shaping"
+description = "Turn 2D figures into 3D objects."
+access = "public"
+
+frontend_dir = "app/dist"
+
+# Build step honoured by tw_platform/deploy.py, which injects VITE_PUBLIC_BASE=/shaping/.
+[build]
+install  = ["npx", "--yes", "pnpm@11", "install", "--frozen-lockfile"]
+build    = ["npx", "--yes", "pnpm@11", "build"]
+env_vars = ["VITE_PUBLIC_BASE"]
+
+[deploy]
+exclude = ["docs", "skills", "node_modules", "packages/shaping/node_modules", "app/node_modules"]
