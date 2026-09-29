@@ -10,6 +10,7 @@ import { Dials } from '../dials/Dials';
 import { DrawingCanvas } from '../draw';
 import { TextSourceEditor } from '../fonts';
 import { putBlob } from '../lib/blobs';
+import { heldUrl, hostOf, isHeldRemote } from '../persist/incoming';
 import { useApp } from '../state/store';
 import { geometry } from '../worker/client';
 import type { MaskPreview } from '../worker/protocol';
@@ -120,7 +121,15 @@ export function SourcePanel({ profileId }: { profileId: string }) {
               Replace…
             </button>
           </div>
-          {source.kind === 'image' && <ImageTuning design={design} slot={slot.id} src={source.src} profileId={profileId} />}
+          {source.kind === 'image' && isHeldRemote(source.src) && (
+            <div role="alert" className="flex flex-col gap-1 rounded border border-amber-700 px-2 py-1.5 text-xs text-amber-900">
+              This design loads its image from {hostOf(heldUrl(source.src))}. Nothing has been fetched yet.
+              <button className="self-start rounded border border-line bg-white px-2 py-0.5 hover:border-muted" onClick={() => update((d) => setSource(d, slot.id, { ...source, src: heldUrl(source.src) }))}>
+                Load image from {hostOf(heldUrl(source.src))}
+              </button>
+            </div>
+          )}
+          {source.kind === 'image' && !isHeldRemote(source.src) && <ImageTuning design={design} slot={slot.id} src={source.src} profileId={profileId} />}
         </div>
       )}
 

@@ -43,7 +43,7 @@ export function Slider({ value, min, max, step, onChange, restGhost, disabled, l
           aria-label={`${label}: back to ${ghost}`}
           title={dragStart !== null ? `Back to where you started (${ghost})` : `Back to the default (${ghost})`}
           onClick={() => onChange(ghost!)}
-          className="absolute top-1/2 z-10 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/60 bg-accent/25 hover:bg-accent/50"
+          className="absolute top-1/2 z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/60 bg-accent/25 hover:bg-accent/50"
           style={{ left: `calc(${pct(ghost!)} * (100% - ${THUMB_PX}px) + ${THUMB_PX / 2}px)` }}
         />
       )}

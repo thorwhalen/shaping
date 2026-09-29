@@ -10,7 +10,13 @@
  */
 import { z } from 'zod';
 
-export const DESIGN_VERSION = 1 as const;
+/**
+ * Version of the Design document. Older versions are migrated on the way in (see `migrateDesign`),
+ * so saved work, shared links and files keep meaning what they meant.
+ * - 2 (2026-09-29): a text source's `round` became a share of the stroke's half-width (was a radius
+ *   in cells) and rounds concave corners too.
+ */
+export const DESIGN_VERSION = 2 as const;
 
 const vec2 = z.tuple([z.number(), z.number()]);
 const ring = z.array(vec2);
@@ -208,7 +214,7 @@ export const AnimationSchema = z.object({
 
 // ---------------------------------------------------------------- the design
 
-export const DesignSchema = z.object({
+export const DesignObjectSchema = z.object({
   version: z.literal(DESIGN_VERSION),
   id: z.string().min(1),
   title: z.string().default('Untitled'),
@@ -241,8 +247,27 @@ export type Style = z.infer<typeof StyleSchema>;
 export type View = z.infer<typeof ViewSchema>;
 export type FlatAction = z.infer<typeof FlatActionSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
-export type Design = z.infer<typeof DesignSchema>;
-export type DesignInput = z.input<typeof DesignSchema>;
+/** In version 1 a block-text `round` was a radius in cells (0..0.5); it is now a share of the half-stroke. */
+const V1_ROUND_TO_V2 = 1 / (0.5 * 0.98);
+
+/** Bring an older Design document up to the current version. Unknown shapes pass through to validation. */
+export function migrateDesign(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const d = input as { version?: unknown; sources?: Record<string, { kind?: string; round?: number }> };
+  if (d.version !== 1) return input;
+  const sources = Object.fromEntries(
+    Object.entries(d.sources ?? {}).map(([k, src]) =>
+      src?.kind === 'text' && typeof src.round === 'number' ? [k, { ...src, round: Math.min(1, src.round * V1_ROUND_TO_V2) }] : [k, src],
+    ),
+  );
+  return { ...d, version: 2, sources };
+}
+
+/** The Design schema, accepting older versions (migrated first). */
+export const DesignSchema = z.preprocess(migrateDesign, DesignObjectSchema);
+
+export type Design = z.infer<typeof DesignObjectSchema>;
+export type DesignInput = z.input<typeof DesignObjectSchema>;
 
 /** Keys of an object schema whose fields carry `.meta({ render: true })`: display only, never geometry. */
 function renderOnlyKeys(schema: z.ZodObject<z.ZodRawShape>): string[] {

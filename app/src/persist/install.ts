@@ -101,5 +101,14 @@ export function registerServiceWorker(base: string = import.meta.env.BASE_URL): 
   if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
   addEventListener('load', () => {
     navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch((e) => console.warn('shaping: offline support is unavailable:', e));
+    // A new version took over (a deploy): reload once, so this tab never asks for chunks of the old
+    // build that the server no longer has. Not on the first install, when there was no controller.
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
   });
 }

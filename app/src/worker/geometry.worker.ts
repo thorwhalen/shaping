@@ -18,6 +18,15 @@ let kernelPromise: Promise<Kernel> | null = null;
 const kernel = () => (kernelPromise ??= manifoldKernel({ wasmUrl }));
 
 async function loadBytes(src: string): Promise<{ bytes: Uint8Array; mediaType?: string }> {
+  if (src.startsWith('ask:')) {
+    let host = src;
+    try {
+      host = new URL(src.slice(4)).host;
+    } catch {
+      /* keep the raw value */
+    }
+    throw new Error(`This design loads its image from ${host}. Nothing is fetched until you allow it: see "Load image" in the Source panel.`);
+  }
   if (isBlobRef(src)) {
     const b = await getBlob(src);
     return { bytes: b.bytes, mediaType: b.mediaType };

@@ -154,3 +154,15 @@ describe('buildKey', () => {
     expect(changed.diagnostics.regions).toEqual(base.diagnostics.regions);
   });
 });
+
+describe('design migration', () => {
+  it('a version-1 design keeps its shape: round is converted to the new meaning', async () => {
+    const { parseDesign } = await import('../index.js');
+    const v1 = { version: 1, id: 'm', genre: 'turned', sources: { figure: { kind: 'text', text: 'KO', round: 0.2 } } };
+    const d = parseDesign(v1);
+    expect(d.version).toBe(2);
+    expect((d.sources.figure as { round: number }).round).toBeCloseTo(0.2 / 0.49, 6);
+    const again = parseDesign(d);
+    expect(again).toEqual(d);
+  });
+});

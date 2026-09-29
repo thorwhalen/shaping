@@ -15,6 +15,7 @@
  */
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
 import { copyDesign, DesignSchema, formatIssues, type Design } from 'shaping';
+import { holdRemoteImages, refuseBrowserImages } from './incoming';
 import { fromBase64Url, toBase64Url } from './dataurl';
 import { PersistError, type BlobStore, type ShareResult } from './types';
 
@@ -96,7 +97,7 @@ export function designFromLink(param: string): Design {
   }
   const r = DesignSchema.safeParse({ ...(json as object), id: 'shared' });
   if (!r.success) throw new PersistError(`This link does not hold a valid design.\n${formatIssues(r.error)}`);
-  return copyDesign(r.data);
+  return holdRemoteImages(refuseBrowserImages(copyDesign(r.data)));
 }
 
 /** The `?s=` value of the page's address, or null. */

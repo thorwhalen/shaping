@@ -1,15 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "one-two-three",
   "title": "1, 2, 3",
   "description": "Three digits in one block. Some of each shadow is missing: the red on the walls shows where.",
   "genre": "shadow-blocks",
   "sources": {
-    "front": { "kind": "text", "text": "1" },
-    "side": { "kind": "text", "text": "2" },
-    "top": { "kind": "text", "text": "3" }
+    "front": {
+      "kind": "text",
+      "text": "1"
+    },
+    "side": {
+      "kind": "text",
+      "text": "2"
+    },
+    "top": {
+      "kind": "text",
+      "text": "3"
+    }
   },
-  "params": { "fit": "stretch" },
+  "params": {
+    "fit": "stretch"
+  },
   "sizeMm": 40,
-  "style": { "material": "matte", "color": "#4caf6d" }
+  "style": {
+    "material": "matte",
+    "color": "#4caf6d"
+  }
 }

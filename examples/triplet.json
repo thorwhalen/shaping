@@ -1,14 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "triplet-geb",
   "title": "Trip-let: G, E, B",
   "description": "Three block letters, one solid. Seen from the front it casts a G, from the side an E, from above a B.",
   "genre": "shadow-blocks",
   "sources": {
-    "front": { "kind": "text", "text": "G", "round": 0.15 },
-    "side": { "kind": "text", "text": "E", "round": 0.15 },
-    "top": { "kind": "text", "text": "B", "round": 0.15 }
+    "front": {
+      "kind": "text",
+      "text": "G",
+      "round": 0.306
+    },
+    "side": {
+      "kind": "text",
+      "text": "E",
+      "round": 0.306
+    },
+    "top": {
+      "kind": "text",
+      "text": "B",
+      "round": 0.306
+    }
   },
-  "params": { "fit": "stretch", "frame": "none" },
+  "params": {
+    "fit": "stretch",
+    "frame": "none"
+  },
   "sizeMm": 50
 }

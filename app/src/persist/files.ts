@@ -13,6 +13,7 @@
  * the others still import. Files are told apart by their content, never by their name.
  */
 import { DesignSchema, formatIssues, type Design } from 'shaping';
+import { holdRemoteImages } from './incoming';
 import { z } from 'zod';
 import { bytesToDataUrl, dataUrlToBytes } from './dataurl';
 import { PersistError, type BlobStore, type CollectionFile, type DesignFile, type EmbeddedImage, type ExportOptions, type FileOut, type ParsedFile, type RejectedItem } from './types';
@@ -114,7 +115,7 @@ function checkVersion(json: Record<string, unknown>) {
 function readDesign(value: unknown): Design {
   const r = DesignSchema.safeParse(value);
   if (!r.success) throw new PersistError(`This file does not hold a valid design.\n${formatIssues(r.error)}`);
-  return r.data;
+  return holdRemoteImages(r.data);
 }
 
 function readCollection(json: Record<string, unknown>): CollectionFile {
@@ -123,7 +124,7 @@ function readCollection(json: Record<string, unknown>): CollectionFile {
   const rejected: RejectedItem[] = [];
   for (const [key, value] of Object.entries(json.items)) {
     const r = DesignSchema.safeParse(value);
-    if (r.success) items[key] = { ...r.data, id: key };
+    if (r.success) items[key] = holdRemoteImages({ ...r.data, id: key });
     else rejected.push({ key, reason: formatIssues(r.error) });
   }
   return { kind: 'collection', items, rejected, images: readImages(json) };

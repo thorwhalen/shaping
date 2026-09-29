@@ -31,11 +31,11 @@ describe('share by link', () => {
     expect(encodeDesign(textDesign('a', 'Shape')).length).toBeLessThan(MAX_SHARE_PARAM_CHARS / 4);
   });
 
-  it('lets http(s) image sources travel as they are', () => {
+  it('lets http(s) image sources travel, held until the recipient allows the fetch', () => {
     const d = imageDesign('i', 'https://example.org/cat.png');
     const r = shareLink(d, BASE, blobs);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(designFromLink(paramOf(r.url)).sources.profile).toEqual(d.sources.profile);
+    if (r.ok) expect(designFromLink(paramOf(r.url)).sources.profile).toEqual({ ...d.sources.profile, src: 'ask:https://example.org/cat.png' });
   });
 
   it('refuses an image kept in the browser, and says why', () => {
@@ -71,5 +71,17 @@ describe('share by link', () => {
   it('reads the parameter from an address', () => {
     expect(sharedParam('?d=x&s=1.abc')).toBe('1.abc');
     expect(sharedParam('?d=x')).toBeNull();
+  });
+});
+
+describe('incoming designs never fetch on their own', () => {
+  it('holds remote images and refuses browser-local ones', async () => {
+    const { holdRemoteImages, refuseBrowserImages, isHeldRemote } = await import('./incoming');
+    const { parseDesign } = await import('shaping');
+    const d = parseDesign({ version: 2, id: 'x', genre: 'turned', sources: { figure: { kind: 'image', src: 'https://example.org/a.png' } } });
+    const held = holdRemoteImages(d);
+    expect(isHeldRemote((held.sources.figure as { src: string }).src)).toBe(true);
+    const local = parseDesign({ version: 2, id: 'y', genre: 'turned', sources: { figure: { kind: 'image', src: 'idb:abc' } } });
+    expect(() => refuseBrowserImages(local)).toThrow(/sender's browser/);
   });
 });

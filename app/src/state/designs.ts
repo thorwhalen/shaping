@@ -15,12 +15,18 @@ export interface SavedDesign {
 }
 
 const STORAGE_KEY = 'shaping.designs.v1';
+const LIST_PAGE_SIZE = 200;
 
 export function designStore(provider: DataProvider<SavedDesign> = createLocalStorageProvider<SavedDesign>({ storageKey: STORAGE_KEY, idField: 'id' })) {
   return {
+    /** Every saved design, newest first (paged through, so nothing is left out). */
     async list(): Promise<SavedDesign[]> {
-      const { data } = await provider.getList({ sort: [{ id: 'updated', desc: true }], pagination: { page: 1, pageSize: 500 } });
-      return data;
+      const all: SavedDesign[] = [];
+      for (let page = 1; ; page++) {
+        const { data, total } = await provider.getList({ sort: [{ id: 'updated', desc: true }], pagination: { page, pageSize: LIST_PAGE_SIZE } });
+        all.push(...data);
+        if (data.length < LIST_PAGE_SIZE || all.length >= total) return all;
+      }
     },
     async get(id: string): Promise<Design | null> {
       try {

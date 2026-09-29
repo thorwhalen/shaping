@@ -75,7 +75,14 @@ export const useApp = create<AppState>()((set, get) => {
     const genre = genres[d.genre];
     if (!genre) return set({ error: `Unknown genre "${d.genre}".` });
     const key = buildKey(d);
-    if (key === builtKey && get().model) return;
+    if (key === builtKey && get().model) {
+      // Back to what is on screen (e.g. the ghost thumb): nothing to build, and any build still
+      // running for an intermediate value must not land on top of it.
+      appliedSeq = ++refreshSeq;
+      clearTimeout(busyTimer);
+      set({ stale: false, busy: false });
+      return;
+    }
     const seq = ++refreshSeq;
     set({ stale: true });
     clearTimeout(busyTimer);
@@ -105,7 +112,8 @@ export const useApp = create<AppState>()((set, get) => {
     }
     try {
       const model = await geometry().build(d, Object.fromEntries(genre.slots.map((s) => [s.id, figs[s.id].figure!])));
-      if (!model || seq < appliedSeq) return;
+      // Only a result for the open design, and newer than the one on screen, is applied.
+      if (!model || seq < appliedSeq || get().design?.id !== d.id) return;
       appliedSeq = seq;
       builtKey = key;
       set({ model, error: null });
@@ -137,7 +145,10 @@ export const useApp = create<AppState>()((set, get) => {
       flushSave();
       const slot = design ? (genres[design.genre]?.slots[0]?.id ?? '') : '';
       builtKey = '';
-      set({ design, model: null, figures: {}, masks: {}, error: null, activeSlot: slot });
+      // Anything still running for the previous design is now older than what is on screen.
+      appliedSeq = ++refreshSeq;
+      clearTimeout(busyTimer);
+      set({ design, model: null, figures: {}, masks: {}, error: null, stale: false, busy: false, activeSlot: slot });
       if (design) changed();
     },
     update(fn) {

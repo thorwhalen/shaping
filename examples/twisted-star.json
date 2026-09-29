@@ -1,11 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "id": "twisted-star",
   "title": "Twisted star",
   "description": "The same star, extruded with a twist and a taper, built from the middle out so the mid-plane is the star itself.",
   "genre": "turned",
-  "sources": { "figure": { "kind": "shape", "shape": "star", "n": 6, "ratio": 0.55 } },
-  "params": { "transform": { "kind": "extrude", "depth": 1.4, "twistDeg": 90, "scaleTop": 0.55, "symmetric": true } },
+  "sources": {
+    "figure": {
+      "kind": "shape",
+      "shape": "star",
+      "n": 6,
+      "ratio": 0.55
+    }
+  },
+  "params": {
+    "transform": {
+      "kind": "extrude",
+      "depth": 1.4,
+      "twistDeg": 90,
+      "scaleTop": 0.55,
+      "symmetric": true
+    }
+  },
   "sizeMm": 60,
-  "style": { "material": "brushed-metal", "color": "#c9a24a" }
+  "style": {
+    "material": "brushed-metal",
+    "color": "#c9a24a"
+  }
 }
