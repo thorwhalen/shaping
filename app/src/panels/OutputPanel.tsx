@@ -29,9 +29,9 @@ export function OutputPanel({ profileId, setProfileId }: { profileId: string; se
     const ex = exporters[id];
     const options = ex.kind === '2d' ? { operation, kerf, title: design.title } : { title: design.title };
     const name = exportFileName(design.title, ex, design.sizeMm, options);
-    const handle = await pickSaveHandle(name, ex.mediaType);
     setStatus(`Writing ${name}…`);
     try {
+      const handle = await pickSaveHandle(name, ex.mediaType);
       // Colours are display fields: export the model coloured as it is shown.
       const bytes = await geometry().export(recolor(model, design.style), id, options);
       await saveBytes(bytes, name, ex.mediaType, handle);

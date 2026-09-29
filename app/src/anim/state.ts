@@ -51,8 +51,33 @@ export function stateFromDesign(d: Design, genre: Genre<any>): ShapingState {
   };
 }
 
-/** The Design showing a state: everything a state does not hold comes from `base`. */
-export function designWithState(base: Design, s: ShapingState): Design {
+/** Dotted paths of the genre's integer parameters (counts, segments): tweened, then rounded. */
+export function integerPaths(genre: Genre<any>): string[] {
+  const out: string[] = [];
+  const walk = (j: JsonSchema, prefix: string) => {
+    for (const [k, raw] of Object.entries(j.properties ?? {})) {
+      const v = baseOf(raw);
+      if (v.type === 'integer') out.push(prefix + k);
+      else if (v.type === 'object' && v.properties) walk(v, `${prefix}${k}.`);
+    }
+  };
+  walk(jsonOf(genre.params), '');
+  return out;
+}
+
+function roundAt(o: Record<string, unknown>, path: string): Record<string, unknown> {
+  const [head, ...rest] = path.split('.');
+  const v = o[head];
+  if (rest.length === 0) return typeof v === 'number' ? { ...o, [head]: Math.round(v) } : o;
+  return v && typeof v === 'object' ? { ...o, [head]: roundAt(v as Record<string, unknown>, rest.join('.')) } : o;
+}
+
+/**
+ * The Design showing a state: everything a state does not hold comes from `base`. With the genre,
+ * its parameters are made valid for it: integers rounded (a count tweened from 3 to 6 passes 4.5),
+ * and parameters of another genre dropped.
+ */
+export function designWithState(base: Design, s: ShapingState, genre?: Genre<any>): Design {
   return {
     ...base,
     view: {
@@ -73,9 +98,15 @@ export function designWithState(base: Design, s: ShapingState): Design {
       lightColor: s.light.color,
     },
     style: { ...base.style, ...(s.style as Partial<Design['style']>) },
-    params: { ...base.params, ...s.params },
+    params: genre ? validParams(genre, { ...base.params, ...s.params }) : { ...base.params, ...s.params },
     sizeMm: s.sizeMm,
   };
+}
+
+function validParams(genre: Genre<any>, params: Record<string, unknown>): Record<string, unknown> {
+  const rounded = integerPaths(genre).reduce(roundAt, params);
+  const r = genre.params.safeParse(rounded);
+  return r.success ? (r.data as Record<string, unknown>) : rounded;
 }
 
 const isColorDefault = (j: JsonSchema) => typeof j.default === 'string' && j.default.startsWith('#');

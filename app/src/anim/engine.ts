@@ -22,12 +22,14 @@ const MODEL_CACHE_SIZE = 24;
 
 export interface ShapingEngineDeps {
   /** The open design (the base every state is laid over) and its current model and figures. */
-  current: () => { design: Design; model: Model; figures: Record<string, Figure> };
+  current: () => { design: Design; model: Model; modelKey: string; figures: Record<string, Figure> };
   genre: Genre<any>;
   /** Show a design and model on screen without touching the store; null returns to the live view. */
   setOverride: (o: { design: Design; model: Model } | null) => void;
   /** The viewer's offscreen capture. */
   capture: () => ((r: CaptureRequest) => Promise<ImageData>) | null;
+  /** Store a camera movement still settling, so `read` sees what is on screen. */
+  flushPose?: () => void;
 }
 
 const nextPaint = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -36,9 +38,10 @@ export function shapingEngine(deps: ShapingEngineDeps): Engine<ShapingState> & {
   const cache = new Map<string, Model>();
 
   async function modelFor(d: Design, signal?: AbortSignal): Promise<Model> {
-    const { design, model, figures } = deps.current();
+    const { model, modelKey, figures } = deps.current();
     const key = buildKey(d);
-    if (key === buildKey(design)) return model;
+    // The store's model only if it was built for exactly this geometry (not the one before a dial moved).
+    if (model && key === modelKey) return model;
     const hit = cache.get(key);
     if (hit) return hit;
     const built = await geometry().build(d, figures, 'frame');
@@ -49,18 +52,24 @@ export function shapingEngine(deps: ShapingEngineDeps): Engine<ShapingState> & {
     return built;
   }
 
-  const designOf = (s: ShapingState) => designWithState(deps.current().design, s);
+  const designOf = (s: ShapingState) => designWithState(deps.current().design, s, deps.genre);
+  /** Bumped by `release`: an apply that started before it must not show its frame after it. */
+  let generation = 0;
 
   return {
     space: shapingSpace(deps.genre),
     traits: { pure: true, alpha: true },
 
-    read: () => stateFromDesign(deps.current().design, deps.genre),
+    read: () => {
+      deps.flushPose?.();
+      return stateFromDesign(deps.current().design, deps.genre);
+    },
 
     async apply(state, opts) {
+      const mine = generation;
       const design = designOf(state);
       const model = await modelFor(design, opts?.signal);
-      if (opts?.signal?.aborted) return;
+      if (opts?.signal?.aborted || mine !== generation) return;
       deps.setOverride({ design, model });
       await nextPaint();
     },
@@ -76,6 +85,7 @@ export function shapingEngine(deps: ShapingEngineDeps): Engine<ShapingState> & {
 
     /** Back to the live view, and forget cached models. */
     release() {
+      generation++;
       deps.setOverride(null);
       cache.clear();
     },

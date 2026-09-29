@@ -36,7 +36,7 @@ export function dialSweep(genre: Genre<any>): Formula<any> | null {
   const params = z
     .object({
       dial: z.enum(ids).default(ids[0]).meta({ title: 'Dial' }),
-      to: z.number().optional().meta({ title: 'To (empty: the far end of its range)' }),
+      to: z.number().min(0).max(1).nullable().default(null).meta({ title: 'To (share of the range; auto: the far end)', step: 0.01 }),
       seconds: z.number().positive().max(120).default(SWEEP_SECONDS).meta({ title: 'Seconds' }),
       pingPong: z.boolean().default(true).meta({ title: 'There and back' }),
     })
@@ -50,7 +50,7 @@ export function dialSweep(genre: Genre<any>): Formula<any> | null {
     build: ({ dial, to, seconds, pingPong }: z.output<typeof params>, context) => {
       const d = dials.find((x) => x.path === dial)!;
       const now = Number((context.base.params as Record<string, unknown>) && dial.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], context.base.params));
-      const target = to ?? (Math.abs(d.max - now) >= Math.abs(now - d.min) ? d.max : d.min);
+      const target = to !== null ? d.min + to * (d.max - d.min) : Math.abs(d.max - now) >= Math.abs(now - d.min) ? d.max : d.min;
       return buildFormula(sweep, { path: `params.${dial}`, to: target, seconds, pingPong }, context);
     },
   };

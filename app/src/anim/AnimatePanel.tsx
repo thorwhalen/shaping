@@ -9,7 +9,7 @@
  *   its parameter schema.
  * Playback and export go through the same compiled reel, so the file shows what the viewer played.
  */
-import { compile, type Reel } from 'previz';
+import { compile, parseSequence, type Reel } from 'previz';
 import { expand, type Formula } from 'previz/formulas';
 import { gifSink } from 'previz/gif';
 import { createPlayer, type Player } from 'previz/play';
@@ -21,13 +21,23 @@ import { Dials } from '../dials/Dials';
 import { genres } from '../genres';
 import { pickSaveHandle, saveBytes } from '../media/png';
 import { useApp } from '../state/store';
-import { captureRef } from '../viewer/Viewer';
+import { captureRef, flushPose } from '../viewer/Viewer';
 import { shapingEngine } from './engine';
 import { shapingFormulas } from './formulas';
 import { captureKeyframe, emptySequence, moveKeyframe, removeKeyframe, TIMINGS, updateKeyframe, type ShapingSequence } from './sequence';
 import { designWithState, shapingSpace, type ShapingState } from './state';
 
 type Mode = 'capture' | 'formulas';
+
+/** The design's stored sequence, validated (a link or a file may carry anything); else an empty one. */
+function storedSequence(stored: unknown, space: ShapingSequence['space']): ShapingSequence {
+  if (!stored) return emptySequence(space);
+  try {
+    return { ...(parseSequence(stored) as ShapingSequence), space };
+  } catch {
+    return emptySequence(space);
+  }
+}
 /** Which ways to author the app offers: `both` (default), `capture` or `formulas`. */
 const CONFIGURED = (import.meta.env.VITE_ANIMATION_MODES as string | undefined) ?? 'both';
 const MODES: Mode[] = CONFIGURED === 'capture' ? ['capture'] : CONFIGURED === 'formulas' ? ['formulas'] : ['capture', 'formulas'];
@@ -68,24 +78,28 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
         current: () => {
           const s = useApp.getState();
           const figures = Object.fromEntries(Object.entries(s.figures).map(([k, v]) => [k, v.figure!]));
-          return { design: s.design!, model: s.model!, figures };
+          return { design: s.design!, model: s.model!, modelKey: s.modelKey, figures };
         },
         genre,
         setOverride,
         capture: () => captureRef.current,
+        flushPose: () => flushPose.current(),
       }),
     [genre, setOverride],
   );
 
-  const sequence: ShapingSequence = (design.sequence as ShapingSequence | undefined) ?? emptySequence(space);
+  const sequence: ShapingSequence = useMemo(() => storedSequence(design.sequence, space), [design.sequence, space]);
   const setSequence = (next: ShapingSequence) => edit((d) => void (d.sequence = next as unknown as Record<string, unknown>));
   const formula = formulas.find((f) => f.id === formulaId) ?? formulas[0];
-  const params = formula ? (formula.params.parse(formulaParams) as Record<string, unknown>) : {};
+  // A value the form allowed but the formula refuses never crashes the panel: the defaults stand in.
+  const parsedParams = formula ? formula.params.safeParse(formulaParams) : null;
+  const params = (parsedParams?.success ? parsedParams.data : formula?.params.parse({})) as Record<string, unknown> ?? {};
 
   // Stop playback and exports when leaving the panel or switching design.
   useEffect(() => () => stopAll(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function stopAll() {
+    flushPose.current();
     player.current?.dispose();
     player.current = null;
     abort.current?.abort();
@@ -111,10 +125,8 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
       const r = reel();
       const p = createPlayer(r, engine, { onError: (e) => setStatus((e as Error).message) });
       p.subscribe((e) => {
-        if (e.status === 'ended') {
-          engine.release();
-          setPlaying(false);
-        }
+        // Dispose first: the player's last apply may still be in flight, and must not land after release.
+        if (e.status === 'ended') queueMicrotask(stopAll);
       });
       player.current = p;
       setPlaying(true);
@@ -136,7 +148,12 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
     const width = even(height * viewerAspect());
     const base = design.title.replace(/[^\w-]+/g, '-').toLowerCase() || 'shaping';
     const name = kind === 'gif' ? `${base}.gif` : `${base}.mp4`;
-    const handle = await pickSaveHandle(name, kind === 'gif' ? 'image/gif' : 'video/mp4');
+    let handle: Awaited<ReturnType<typeof pickSaveHandle>>;
+    try {
+      handle = await pickSaveHandle(name, kind === 'gif' ? 'image/gif' : 'video/mp4');
+    } catch (e) {
+      return setStatus((e as Error).message);
+    }
     const ctrl = new AbortController();
     abort.current = ctrl;
     setProgress(0);
@@ -183,7 +200,7 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
                 <div className="flex items-center gap-1">
                   <span className="w-5 text-xs text-muted">{i + 1}</span>
                   <input aria-label={`Name of view ${i + 1}`} className="min-w-0 flex-1 rounded px-1 hover:bg-paper focus:bg-paper" value={k.label ?? k.id} onChange={(e) => setSequence(updateKeyframe(sequence, i, { label: e.target.value }))} />
-                  <button title="Show this view (and make it the one being edited)" className="rounded px-1 text-xs text-muted hover:text-ink" onClick={() => update((d) => designWithState(d, { ...(engine.read!() as ShapingState), ...(k.state as ShapingState) }))}>
+                  <button title="Show this view (and make it the one being edited)" className="rounded px-1 text-xs text-muted hover:text-ink" onClick={() => update((d) => designWithState(d, { ...(engine.read!() as ShapingState), ...(k.state as ShapingState) }, genre))}>
                     go
                   </button>
                   <button aria-label="Move up" className="px-1 text-muted hover:text-ink disabled:opacity-30" disabled={i === 0} onClick={() => setSequence(moveKeyframe(sequence, i, -1))}>↑</button>

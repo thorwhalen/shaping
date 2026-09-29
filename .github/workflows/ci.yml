@@ -32,7 +32,9 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git clone --depth 1 "https://x-access-token:${PREVIZ_READ_TOKEN}@github.com/thorwhalen/previz.git" ../previz
+          # Pinned to the previz commit this app is written against (v0.1.0); bump with scripts/vendor-previz.mjs.
+          git clone "https://x-access-token:${PREVIZ_READ_TOKEN}@github.com/thorwhalen/previz.git" ../previz
+          git -C ../previz checkout --quiet b039296
           (cd ../previz && npx --yes pnpm@11 install && npx --yes pnpm@11 build)
           node scripts/vendor-previz.mjs
           echo "available=true" >> "$GITHUB_OUTPUT"

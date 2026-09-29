@@ -47,5 +47,6 @@ export const setPrepare = (d: Design, slot: string, key: string, value: unknown)
 export function switchGenre(d: Design, genreId: string, genres: GenreTable): Design {
   const fresh = newDesign(genreId, genres, { id: d.id, title: d.title });
   const sources = Object.fromEntries(Object.entries(fresh.sources).map(([slot, s]) => [slot, d.sources[slot] ?? s]));
-  return { ...fresh, sources, style: d.style, view: d.view, sizeMm: d.sizeMm };
+  // The sequence stays: its views keep their camera and light; dials of the old genre are dropped when shown.
+  return { ...fresh, sources, style: d.style, view: d.view, sizeMm: d.sizeMm, ...(d.sequence ? { sequence: d.sequence } : {}) };
 }

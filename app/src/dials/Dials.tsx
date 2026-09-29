@@ -112,9 +112,11 @@ function Field({ name, path, schema, value, siblings, onChange }: { name: string
     );
 
   if (type === 'number' || type === 'integer') {
-    const min = base.minimum ?? base.exclusiveMinimum ?? 0;
+    const lower = base.minimum ?? base.exclusiveMinimum ?? 0;
     const max = base.maximum ?? Math.max(1, Number(base.default ?? 1) * 4);
-    const step = base.step ?? (type === 'integer' ? 1 : (max - min) / DEFAULT_SLIDER_STEPS);
+    const step = base.step ?? (type === 'integer' ? 1 : (max - lower) / DEFAULT_SLIDER_STEPS);
+    // An exclusive minimum ("positive") is not itself a valid value: start one step above it.
+    const min = base.minimum === undefined && base.exclusiveMinimum !== undefined ? lower + step : lower;
     const isAuto = nullable && (value === null || value === undefined);
     const shown = isAuto ? Number(base.default ?? min) : Number(value ?? base.default ?? min);
     return (

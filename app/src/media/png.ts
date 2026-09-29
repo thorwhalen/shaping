@@ -64,7 +64,21 @@ export async function pickSaveHandle(fileName: string, mediaType: string): Promi
   const picker = pickerOf();
   if (!picker) return null;
   const ext = extensionOf(fileName);
-  return picker({ suggestedName: fileName, types: [{ description: fileName, accept: { [mediaType]: ext ? [ext] : [] } }] });
+  try {
+    return await picker({ suggestedName: fileName, types: [{ description: fileName, accept: { [mediaType]: ext ? [ext] : [] } }] });
+  } catch (e) {
+    // The user closed the dialog: say so plainly, so the caller can stop without an error.
+    if ((e as { name?: string }).name === 'AbortError') throw new SaveCancelled();
+    throw e;
+  }
+}
+
+/** The user cancelled the save dialog. */
+export class SaveCancelled extends Error {
+  constructor() {
+    super('Saving was cancelled.');
+    this.name = 'SaveCancelled';
+  }
 }
 
 function download(blob: Blob, fileName: string): void {

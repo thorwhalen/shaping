@@ -57,3 +57,17 @@ describe('keyframe list', () => {
     expect(removeKeyframe(seq, 0).keyframes).toHaveLength(1);
   });
 });
+
+describe('states become valid designs', () => {
+  it('integer dials tweened to a fraction are rounded; other genres\' dials are dropped', () => {
+    const genre = builtInGenres.turned;
+    const d = newDesign('turned', builtInGenres, { id: 'i' });
+    const s = stateFromDesign(d, genre);
+    const mid = { ...s, params: { ...s.params, transform: { ...(s.params.transform as object), count: 4.5, segments: 97.4 }, frame: 'border' } };
+    const out = designWithState(d, mid as typeof s, genre);
+    const t = out.params.transform as { count: number; segments: number };
+    expect([t.count, t.segments]).toEqual([5, 97]);
+    expect('frame' in out.params).toBe(false);
+    expect(genre.params.safeParse(out.params).success).toBe(true);
+  });
+});
