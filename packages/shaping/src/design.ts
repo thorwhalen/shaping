@@ -26,9 +26,9 @@ export const ShapeSourceSchema = z.object({
   kind: z.literal('shape'),
   shape: z.enum(['circle', 'rect', 'ring', 'star', 'polygon', 'cross', 'heart']),
   /** Number of points (star) or sides (polygon). */
-  n: z.number().int().min(3).max(64).default(5),
+  n: z.number().int().min(3).max(64).default(5).meta({ title: 'Points or sides', when: { shape: ['star', 'polygon'] } }),
   /** Inner-to-outer radius ratio (ring, star) or width-to-height ratio (rect, cross). */
-  ratio: z.number().min(0.05).max(20).default(0.5),
+  ratio: z.number().min(0.05).max(20).default(0.5).meta({ title: 'Ratio', step: 0.01, when: { shape: ['rect', 'ring', 'star', 'cross'] } }),
 });
 
 /** Text set in the built-in block font: each glyph is a union of cells, so letters are exact polygons. */
