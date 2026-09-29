@@ -53,4 +53,6 @@ export interface FontsourceOptions {
   apiBase?: string;
   /** Base URL of the file CDN. */
   cdnBase?: string;
+  /** Supplies the catalogue instead of fetching it (an app that caches it passes its own). */
+  catalog?: () => Promise<FontEntry[]>;
 }

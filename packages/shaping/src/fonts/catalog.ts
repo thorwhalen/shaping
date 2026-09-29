@@ -94,13 +94,14 @@ export function fontsourceProvider(opts: FontsourceOptions = {}): FontProvider {
     if (!res.ok) throw new Error(`Could not load the font catalogue (${url}): ${res.status}`);
     return (await res.json()) as T;
   };
-  const catalog = () =>
+  const fetchCatalog = () =>
     (entries ??= Promise.all([getJson<RawFamily[]>(`${apiBase}/fonts`), getJson<RawAxes>(`${apiBase}/variable`)])
       .then(([f, v]) => mergeCatalog(f, v))
       .catch((e) => {
         entries = null;
         throw e;
       }));
+  const catalog = opts.catalog ?? fetchCatalog;
 
   const load: FontLoader = async (fontId) => {
     const entry = (await catalog()).find((e) => e.id === fontId);
