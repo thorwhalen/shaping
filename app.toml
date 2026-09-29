@@ -13,4 +13,5 @@ build    = ["npx", "--yes", "pnpm@11", "build"]
 env_vars = ["VITE_PUBLIC_BASE"]
 
 [deploy]
-exclude = ["docs", "skills", "node_modules", "packages/shaping/node_modules", "app/node_modules"]
+# The server needs only app/dist (and this file); sources, docs and tests never ship.
+exclude = ["docs", "skills", "examples", "packages", "app/src", "app/public", ".github", "node_modules"]
