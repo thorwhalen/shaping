@@ -1,0 +1,19 @@
+{
+  "name": "shaping-workspace",
+  "private": true,
+  "description": "Turn 2D figures into parametrized 3D objects: a library (packages/shaping) and a browser app (app).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r --filter shaping --filter shaping-app run build",
+    "build:lib": "pnpm --filter shaping run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "shaping": "node packages/shaping/dist/cli.js",
+    "dev": "pnpm --filter shaping-app run dev"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

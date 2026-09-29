@@ -1,0 +1,85 @@
+import { readFileSync } from 'node:fs';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { build, manifoldKernel, type Kernel } from '../index.js';
+
+let kernel: Kernel;
+beforeAll(async () => {
+  kernel = await manifoldKernel();
+});
+
+const example = (name: string) => JSON.parse(readFileSync(new URL(`../../../../examples/${name}.json`, import.meta.url), 'utf8'));
+const design = (genre: string, sources: object, params: object = {}) => ({ version: 1, id: 't', genre, sources, params });
+const shape = (shape: string, extra: object = {}) => ({ kind: 'shape', shape, ...extra });
+
+describe('shadow blocks', () => {
+  it('three convex figures give one piece and cast exactly their figures', async () => {
+    const m = await build(design('shadow-blocks', { front: shape('circle'), side: shape('rect'), top: shape('polygon', { n: 6 }) }, { fit: 'stretch' }), { kernel });
+    expect(m.diagnostics.pieces).toBe(1);
+    expect(m.diagnostics.shadows).toHaveLength(3);
+    for (const s of m.diagnostics.shadows!) {
+      expect(s.extraArea / s.targetArea).toBeLessThan(1e-3);
+      expect(s.missingShare).toBeLessThan(1e-3);
+    }
+    expect(Math.max(...[0, 1, 2].map((i) => m.diagnostics.bbox.max[i] - m.diagnostics.bbox.min[i]))).toBeCloseTo(50, 3);
+    expect(kernel.liveCount()).toBe(0);
+  });
+
+  it('figures at different heights report the missing rows; a base bar does not fix a gap, a frame reports nothing extra', async () => {
+    // Front: a bar in the upper half only. Side: full square. The top view (x, y) is a full square.
+    const upper = { kind: 'polygons', figure: { units: 'unit', parts: [{ id: 'u', polygons: [{ outer: [[-1, 0], [1, 0], [1, 1], [-1, 1]], holes: [] }, { outer: [[-1, -1], [-0.9, -1], [-0.9, -0.9], [-1, -0.9]], holes: [] }] }] } };
+    const lower = { kind: 'polygons', figure: { units: 'unit', parts: [{ id: 'l', polygons: [{ outer: [[-1, -1], [1, -1], [1, 0], [-1, 0]], holes: [] }, { outer: [[0.9, 0.9], [1, 0.9], [1, 1], [0.9, 1]], holes: [] }] }] } };
+    const m = await build(design('shadow-blocks', { front: upper, side: lower, top: shape('rect') }, { fit: 'stretch', dropDust: 0 }), { kernel });
+    const byslot = Object.fromEntries(m.diagnostics.shadows!.map((s) => [s.slot, s]));
+    expect(byslot.front.missingShare).toBeGreaterThan(0.3);
+    expect(byslot.side.missingShare).toBeGreaterThan(0.3);
+    for (const s of m.diagnostics.shadows!) expect(s.extraArea / s.targetArea).toBeLessThan(1e-3);
+    expect(m.diagnostics.regions.some((r) => r.role === 'missing')).toBe(true);
+  });
+
+  it('the example trip-let builds and every shadow is checked', async () => {
+    const m = await build(example('triplet'), { kernel });
+    expect(m.bodies.length).toBeGreaterThan(0);
+    expect(m.diagnostics.shadows).toHaveLength(3);
+    for (const s of m.diagnostics.shadows!) expect(s.extraArea / s.targetArea).toBeLessThan(1e-3);
+    console.log('triplet', m.diagnostics.pieces, m.diagnostics.shadows!.map((s) => `${s.slot} ${(100 * s.missingShare).toFixed(1)}%`), m.diagnostics.warnings, m.diagnostics.buildMs);
+  });
+});
+
+describe('turned components', () => {
+  for (const kind of ['revolve', 'extrude', 'radial'] as const) {
+    it(`${kind}: the kernel's cut on the declared plane gives back the figure`, async () => {
+      const m = await build(design('turned', { figure: shape('star', { n: 5, ratio: 0.5 }) }, { axis: -1.2, transform: { kind } }), { kernel });
+      expect(m.bodies).toHaveLength(1);
+      expect(m.diagnostics.warnings.filter((w) => /differs/.test(w))).toEqual([]);
+      expect(m.diagnostics.regions.some((r) => r.role === 'slice')).toBe(true);
+      // Off the axis, a radial array is three separate slabs.
+      expect(m.diagnostics.pieces).toBe(kind === 'radial' ? 3 : 1);
+    });
+  }
+
+  it('a figure crossing the axis is clipped by default and refused on request', async () => {
+    const clipped = await build(design('turned', { figure: shape('heart') }), { kernel });
+    expect(clipped.bodies).toHaveLength(1);
+    const refused = await build(design('turned', { figure: shape('heart') }, { transform: { kind: 'revolve', policy: 'refuse' } }), { kernel });
+    expect(refused.bodies).toHaveLength(0);
+    expect(refused.diagnostics.warnings.join(' ')).toMatch(/crosses the revolve axis/);
+  });
+
+  it('several parts become several coloured bodies; a base joins them', async () => {
+    const text = { kind: 'text', text: 'HI' };
+    const loose = await build(design('turned', { figure: text }, { transform: { kind: 'extrude' } }), { kernel });
+    expect(loose.bodies).toHaveLength(2);
+    expect(new Set(loose.bodies.map((b) => b.color)).size).toBe(2);
+    expect(loose.diagnostics.pieces).toBe(2);
+    const joined = await build(design('turned', { figure: text }, { transform: { kind: 'extrude' }, base: 'plate' }), { kernel });
+    expect(joined.diagnostics.pieces).toBe(1);
+  });
+});
+
+describe('design validation', () => {
+  it('names the offending field', async () => {
+    await expect(build({ version: 1, id: 'x', genre: 'turned', sources: { figure: { kind: 'nope' } } }, { kernel })).rejects.toThrow(/sources\.figure/);
+    await expect(build(design('turned', { figure: shape('circle') }, { axis: 'left' }), { kernel })).rejects.toThrow(/axis/);
+    await expect(build(design('no-such-genre', {}), { kernel })).rejects.toThrow(/Available: turned, shadow-blocks/);
+  });
+});

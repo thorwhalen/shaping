@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      # The v1 acceptance test: one command writes a 3MF that re-reads as a closed mesh.
+      - run: pnpm shaping build examples/triplet.json --format 3mf --out "$RUNNER_TEMP/triplet.3mf"
+      - run: pnpm shaping check examples/triplet.json
+
+  publish:
+    # Merging to main publishes the library when its version is not yet on npm.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:lib
+      - name: Publish if this version is new
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./packages/shaping/package.json').version")
+          if npm view "shaping@$VERSION" version >/dev/null 2>&1; then
+            echo "shaping@$VERSION is already on npm; nothing to publish."
+            exit 0
+          fi
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN is not set on this repository, so shaping@$VERSION cannot be published."
+            exit 1
+          fi
+          cd packages/shaping
+          pnpm publish --access public --no-git-checks
+      - name: Verify the registry serves this version
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./packages/shaping/package.json').version")
+          for i in 1 2 3 4 5 6; do
+            if npm view "shaping@$VERSION" version >/dev/null 2>&1; then echo "npm serves shaping@$VERSION"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::npm does not serve shaping@$VERSION after publishing"; exit 1

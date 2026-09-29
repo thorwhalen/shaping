@@ -1,0 +1,11 @@
+node_modules/
+dist/
+app/dist/
+*.tsbuildinfo
+.DS_Store
+coverage/
+.claude/handoffs/
+.claude/worktrees/
+*.local
+# build and test output never lives in the repo
+out/
