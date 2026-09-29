@@ -16,3 +16,4 @@ export { BLOCK_FONT_CHARS, glyphCells } from './sources/blockfont.js';
 export * from './build.js';
 export * from './transforms/index.js';
 export * from './actions.js';
+export * from './profiles.js';

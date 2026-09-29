@@ -83,3 +83,17 @@ describe('design validation', () => {
     await expect(build(design('no-such-genre', {}), { kernel })).rejects.toThrow(/Available: turned, shadow-blocks/);
   });
 });
+
+describe('gallery', () => {
+  it('every example is a valid design that builds to something non-empty', async () => {
+    const { readdirSync } = await import('node:fs');
+    const dir = new URL('../../../../examples/', import.meta.url);
+    const names = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    expect(names.length).toBeGreaterThanOrEqual(5);
+    for (const n of names) {
+      const m = await build(JSON.parse(readFileSync(new URL(n, dir), 'utf8')), { kernel });
+      expect(m.bodies.length, n).toBeGreaterThan(0);
+      console.log(n, m.diagnostics.pieces, m.diagnostics.shadows?.map((s) => (100 * s.missingShare).toFixed(1)).join('/'), m.diagnostics.warnings.join(' | '), m.diagnostics.buildMs?.toFixed(0), 'ms');
+    }
+  });
+});

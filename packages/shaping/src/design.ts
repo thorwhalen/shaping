@@ -88,15 +88,15 @@ export const PrepareSchema = z.object({
   /** How the mask is extracted from a raster image. */
   mode: z.enum(['auto', 'alpha', 'luminance', 'color', 'adaptive']).default('auto').meta({ title: 'Mask mode' }),
   /** Luminance threshold 0-255; null means "use Otsu's value". */
-  threshold: z.number().min(0).max(255).nullable().default(null).meta({ title: 'Threshold' }),
+  threshold: z.number().min(0).max(255).nullable().default(null).meta({ title: 'Threshold', when: { mode: ['auto', 'luminance'] } }),
   invert: z.boolean().default(false).meta({ title: 'Invert' }),
   /** Reference colour for mode "color". */
-  color: z.string().default('#000000').meta({ title: 'Key colour' }),
+  color: z.string().default('#000000').meta({ title: 'Key colour', when: { mode: ['color'] } }),
   /** Colour distance tolerance for mode "color", 0-1. */
-  tolerance: z.number().min(0).max(1).default(0.25).meta({ title: 'Colour tolerance' }),
+  tolerance: z.number().min(0).max(1).default(0.25).meta({ title: 'Colour tolerance', step: 0.01, when: { mode: ['color'] } }),
   /** Adaptive threshold window (pixels) and offset. */
-  window: z.number().int().min(3).max(201).default(31).meta({ title: 'Adaptive window', unit: 'px' }),
-  offset: z.number().min(-50).max(50).default(5).meta({ title: 'Adaptive offset' }),
+  window: z.number().int().min(3).max(201).default(31).meta({ title: 'Adaptive window', unit: 'px', when: { mode: ['adaptive'] } }),
+  offset: z.number().min(-50).max(50).default(5).meta({ title: 'Adaptive offset', when: { mode: ['adaptive'] } }),
   /** Longest side the image is reduced to before processing. */
   maxSize: z.number().int().min(64).max(4096).default(768).meta({ title: 'Working size', unit: 'px' }),
   /** Components smaller than this share of the image area are dropped (despeckle). */
@@ -111,7 +111,7 @@ export const PrepareSchema = z.object({
   /** How the figure is split into parts. */
   split: z.enum(['components', 'none', 'colors']).default('components').meta({ title: 'Parts' }),
   /** Number of colour clusters when split = "colors". */
-  colors: z.number().int().min(2).max(12).default(3).meta({ title: 'Colour clusters' }),
+  colors: z.number().int().min(2).max(12).default(3).meta({ title: 'Colour clusters', when: { split: ['colors'] } }),
 });
 
 // ---------------------------------------------------------------- style, view, animation

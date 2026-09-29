@@ -98,7 +98,9 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
         diagnostics: { volume: 0, pieces: 0, genus: 0, bbox: { min: [0, 0, 0], max: [0, 0, 0] }, regions: [], warnings: [...warnings, 'The result is empty: nothing survives the operation.'] },
       };
     }
-    const all = taken;
+    // Measure the union of the solids as the genre made them: the disjoint bodies share faces
+    // exactly, and a union of exactly touching solids is not guaranteed to weld.
+    const all = kernel.union(result.bodies.map((b) => b.solid));
 
     // Size: the longest edge becomes design.sizeMm; the object stands on z = 0, centred in x and y.
     const gb = kernel.bbox(all);
@@ -116,7 +118,10 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     });
 
     const allMm = toMm(all);
-    const pieces = kernel.decompose(allMm).length;
+    // Components with negative volume are the shells of sealed cavities, not pieces.
+    const shells = kernel.decompose(allMm).map((c) => kernel.volume(c));
+    const pieces = shells.filter((v) => v > 0).length;
+    const cavities = shells.filter((v) => v < 0).length;
     const regions: PlanarRegion[] = [];
     const scalePolys = (ps: Polygon[]): Polygon[] =>
       ps.map((p) => ({ outer: p.outer.map(([x, y]) => [x * s, y * s]), holes: p.holes.map((h) => h.map(([x, y]) => [x * s, y * s])) }));
@@ -191,11 +196,12 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
       });
     }
 
+    if (cavities > 0) warnings.push(`${cavities} sealed internal cavit${cavities > 1 ? 'ies' : 'y'}: resin and powder processes trap material there.`);
     if (pieces > 1) warnings.push(`${pieces} separate pieces. A printed object would fall apart; see the genre's fixes.`);
     const bb = kernel.bbox(allMm);
     return {
       bodies: outBodies,
-      diagnostics: { volume: kernel.volume(allMm), pieces, genus: kernel.genus(allMm), bbox: bb, regions, shadows: shadows.length ? shadows : undefined, warnings },
+      diagnostics: { volume: kernel.volume(allMm), pieces, cavities, genus: kernel.genus(allMm), bbox: bb, regions, shadows: shadows.length ? shadows : undefined, warnings },
     };
   });
   model.diagnostics.buildMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;

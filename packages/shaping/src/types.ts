@@ -95,6 +95,8 @@ export interface Diagnostics {
   volume: number;
   /** Number of disconnected pieces. */
   pieces: number;
+  /** Number of sealed internal cavities (closed voids inside the solid). */
+  cavities?: number;
   /** Genus of the union (number of handles). */
   genus: number;
   bbox: Box3;
