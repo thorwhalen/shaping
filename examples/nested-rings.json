@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "id": "nested-rings",
+  "title": "Letters turned into rings",
+  "description": "Each letter is a part; revolved about an axis to their left, they become nested rings, each in its own colour.",
+  "genre": "turned",
+  "sources": { "figure": { "kind": "text", "text": "OK", "round": 0.2 } },
+  "params": { "axis": -1.15, "transform": { "kind": "revolve", "angleDeg": 270 }, "base": "disc" },
+  "sizeMm": 70,
+  "style": { "material": "matte", "palette": true }
+}

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "framed-shapes",
+  "title": "Heart, star, circle",
+  "description": "Three shapes that do not agree on their own. A frame on every figure makes all three shadows complete; a little thickening and a base plate hold the pieces together.",
+  "genre": "shadow-blocks",
+  "sources": {
+    "front": {
+      "kind": "shape",
+      "shape": "heart"
+    },
+    "side": {
+      "kind": "shape",
+      "shape": "star",
+      "n": 5,
+      "ratio": 0.5
+    },
+    "top": {
+      "kind": "shape",
+      "shape": "circle"
+    }
+  },
+  "params": {
+    "fit": "contain",
+    "frame": "border",
+    "frameWidth": 0.12,
+    "thicken": 0.05,
+    "basePlate": true
+  },
+  "sizeMm": 50,
+  "style": {
+    "material": "glossy",
+    "color": "#e0b43a"
+  }
+}

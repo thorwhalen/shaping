@@ -83,3 +83,50 @@ describe('design validation', () => {
     await expect(build(design('no-such-genre', {}), { kernel })).rejects.toThrow(/Available: turned, shadow-blocks/);
   });
 });
+
+describe('gallery', () => {
+  it('every example is a valid design that builds to something non-empty', async () => {
+    const { readdirSync } = await import('node:fs');
+    const dir = new URL('../../../../examples/', import.meta.url);
+    const names = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    expect(names.length).toBeGreaterThanOrEqual(5);
+    for (const n of names) {
+      const m = await build(JSON.parse(readFileSync(new URL(n, dir), 'utf8')), { kernel });
+      expect(m.bodies.length, n).toBeGreaterThan(0);
+      console.log(n, m.diagnostics.pieces, m.diagnostics.shadows?.map((s) => (100 * s.missingShare).toFixed(1)).join('/'), m.diagnostics.warnings.join(' | '), m.diagnostics.buildMs?.toFixed(0), 'ms');
+    }
+  });
+});
+
+describe('review regressions', () => {
+  it('multi-body models write STL and PLY as one closed mesh', async () => {
+    const { exportModel } = await import('../export/index.js');
+    const { readStl, readPly, checkClosedMesh } = await import('../export/read.js');
+    for (const name of ['framed-shapes', 'nested-rings']) {
+      const m = await build(example(name), { kernel });
+      expect(m.bodies.length, name).toBeGreaterThan(1);
+      expect(checkClosedMesh(readStl(exportModel(m, 'stl'))).closed, `${name} stl`).toBe(true);
+      expect(checkClosedMesh(readPly(exportModel(m, 'ply'))).closed, `${name} ply`).toBe(true);
+    }
+  });
+
+  it('a base sunk into the parts is not reported as an overlap', async () => {
+    const m = await build(example('nested-rings'), { kernel });
+    expect(m.diagnostics.warnings.filter((w) => /overlaps/.test(w))).toEqual([]);
+  });
+
+  it('policy "both" on a part left of the axis keeps it on its own side (not mirrored)', async () => {
+    const left = { kind: 'polygons', figure: { units: 'unit', parts: [{ id: 'L', polygons: [{ outer: [[-2, 0], [-1, 0], [-1, 1], [-1.5, 2]], holes: [] }] }] } };
+    const both = await build(design('turned', { figure: left }, { axis: 1.2, transform: { kind: 'revolve', policy: 'both', angleDeg: 180 } }), { kernel });
+    const clip = await build(design('turned', { figure: left }, { axis: 1.2, transform: { kind: 'revolve', policy: 'clip', angleDeg: 180 } }), { kernel });
+    const slice = (m: typeof both) => m.diagnostics.regions.find((r) => r.role === 'slice')!;
+    expect(slice(both).origin).toEqual(slice(clip).origin);
+    expect(both.diagnostics.warnings.filter((w) => /differs/.test(w))).toEqual([]);
+  });
+
+  it('an empty model is refused by the 3D exporters', async () => {
+    const { exportModel } = await import('../export/index.js');
+    const empty = await build(design('turned', { figure: shape('heart') }, { transform: { kind: 'revolve', policy: 'refuse' } }), { kernel });
+    expect(() => exportModel(empty, 'glb')).toThrow(/empty/);
+  });
+});

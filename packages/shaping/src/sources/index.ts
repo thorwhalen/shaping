@@ -10,13 +10,18 @@ import type { Kernel } from '../kernel/types.js';
 import type { Figure, Polygon, Ring, Vec2 } from '../types.js';
 import { GLYPH_HEIGHT, GLYPH_WIDTH, glyphCells } from './blockfont.js';
 
+/** What a resolver may use. `kernel` handles are valid only inside `kernel.scope`. */
+export interface ResolverContext {
+  kernel: Kernel;
+}
+
 export interface SourceResolvers {
   /** Decode, threshold and trace a raster image. */
-  image?: (source: ImageSource, prepare: PrepareParams) => Promise<Figure>;
+  image?: (source: ImageSource, prepare: PrepareParams, ctx: ResolverContext) => Promise<Figure>;
   /** Parse an SVG document to polygons. */
-  svg?: (source: SvgSource, prepare: PrepareParams) => Promise<Figure> | Figure;
-  /** Turn a drawing's objects into polygons. */
-  drawing?: (source: DrawingSource, prepare: PrepareParams) => Promise<Figure> | Figure;
+  svg?: (source: SvgSource, prepare: PrepareParams, ctx: ResolverContext) => Promise<Figure> | Figure;
+  /** Turn a drawing's objects into polygons (black objects unioned, erasers subtracted, in order). */
+  drawing?: (source: DrawingSource, prepare: PrepareParams, ctx: ResolverContext) => Promise<Figure> | Figure;
 }
 
 const TAU = Math.PI * 2;
@@ -142,10 +147,10 @@ export async function sourceToFigure(source: Source, prepare: PrepareParams, ctx
     case 'polygons':
       return { units: source.figure.units, parts: source.figure.parts.map((p) => ({ ...p, polygons: p.polygons.map((g) => ({ outer: g.outer, holes: g.holes ?? [] })) })) };
     case 'image':
-      return need('image')(source, prepare);
+      return need('image')(source, prepare, { kernel: ctx.kernel });
     case 'svg':
-      return need('svg')(source, prepare);
+      return need('svg')(source, prepare, { kernel: ctx.kernel });
     case 'drawing':
-      return need('drawing')(source, prepare);
+      return need('drawing')(source, prepare, { kernel: ctx.kernel });
   }
 }

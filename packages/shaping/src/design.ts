@@ -26,9 +26,9 @@ export const ShapeSourceSchema = z.object({
   kind: z.literal('shape'),
   shape: z.enum(['circle', 'rect', 'ring', 'star', 'polygon', 'cross', 'heart']),
   /** Number of points (star) or sides (polygon). */
-  n: z.number().int().min(3).max(64).default(5),
+  n: z.number().int().min(3).max(64).default(5).meta({ title: 'Points or sides', when: { shape: ['star', 'polygon'] } }),
   /** Inner-to-outer radius ratio (ring, star) or width-to-height ratio (rect, cross). */
-  ratio: z.number().min(0.05).max(20).default(0.5),
+  ratio: z.number().min(0.05).max(20).default(0.5).meta({ title: 'Ratio', step: 0.01, when: { shape: ['rect', 'ring', 'star', 'cross'] } }),
 });
 
 /** Text set in the built-in block font: each glyph is a union of cells, so letters are exact polygons. */
@@ -88,15 +88,15 @@ export const PrepareSchema = z.object({
   /** How the mask is extracted from a raster image. */
   mode: z.enum(['auto', 'alpha', 'luminance', 'color', 'adaptive']).default('auto').meta({ title: 'Mask mode' }),
   /** Luminance threshold 0-255; null means "use Otsu's value". */
-  threshold: z.number().min(0).max(255).nullable().default(null).meta({ title: 'Threshold' }),
+  threshold: z.number().min(0).max(255).nullable().default(null).meta({ title: 'Threshold', when: { mode: ['auto', 'luminance'] } }),
   invert: z.boolean().default(false).meta({ title: 'Invert' }),
   /** Reference colour for mode "color". */
-  color: z.string().default('#000000').meta({ title: 'Key colour' }),
+  color: z.string().default('#000000').meta({ title: 'Key colour', when: { mode: ['color'] } }),
   /** Colour distance tolerance for mode "color", 0-1. */
-  tolerance: z.number().min(0).max(1).default(0.25).meta({ title: 'Colour tolerance' }),
+  tolerance: z.number().min(0).max(1).default(0.25).meta({ title: 'Colour tolerance', step: 0.01, when: { mode: ['color'] } }),
   /** Adaptive threshold window (pixels) and offset. */
-  window: z.number().int().min(3).max(201).default(31).meta({ title: 'Adaptive window', unit: 'px' }),
-  offset: z.number().min(-50).max(50).default(5).meta({ title: 'Adaptive offset' }),
+  window: z.number().int().min(3).max(201).default(31).meta({ title: 'Adaptive window', unit: 'px', when: { mode: ['adaptive'] } }),
+  offset: z.number().min(-50).max(50).default(5).meta({ title: 'Adaptive offset', when: { mode: ['adaptive'] } }),
   /** Longest side the image is reduced to before processing. */
   maxSize: z.number().int().min(64).max(4096).default(768).meta({ title: 'Working size', unit: 'px' }),
   /** Components smaller than this share of the image area are dropped (despeckle). */
@@ -111,7 +111,7 @@ export const PrepareSchema = z.object({
   /** How the figure is split into parts. */
   split: z.enum(['components', 'none', 'colors']).default('components').meta({ title: 'Parts' }),
   /** Number of colour clusters when split = "colors". */
-  colors: z.number().int().min(2).max(12).default(3).meta({ title: 'Colour clusters' }),
+  colors: z.number().int().min(2).max(12).default(3).meta({ title: 'Colour clusters', when: { split: ['colors'] } }),
 });
 
 // ---------------------------------------------------------------- style, view, animation
@@ -134,13 +134,13 @@ export const StyleSchema = z.object({
 export const ViewSchema = z.object({
   camera: z.enum(['perspective', 'orthographic']).default('perspective'),
   /** Camera azimuth and elevation, in degrees. Animatable. */
-  azimuthDeg: z.number().default(35).meta({ title: 'Azimuth', unit: '°' }),
+  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ title: 'Azimuth', unit: '°' }),
   elevationDeg: z.number().min(-89).max(89).default(25).meta({ title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
   walls: z.boolean().default(true).meta({ title: 'Shadow walls' }),
   ground: z.boolean().default(true).meta({ title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
-  lightAzimuthDeg: z.number().default(45).meta({ title: 'Light azimuth', unit: '°' }),
+  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ title: 'Light azimuth', unit: '°' }),
   lightElevationDeg: z.number().min(0).max(90).default(55).meta({ title: 'Light elevation', unit: '°' }),
   lightIntensity: z.number().min(0).max(6).default(2.2).meta({ title: 'Light', step: 0.1 }),
   lightColor: z.string().default('#ffffff').meta({ title: 'Light colour' }),

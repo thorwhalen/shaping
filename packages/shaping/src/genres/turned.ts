@@ -9,9 +9,9 @@ import { z } from 'zod';
 import { defineGenre, figureBounds, fitFigure, TRANSFORMS, type Region, type SlicePromise, type Solid, type TransformId } from '../core.js';
 
 export const PartTransformSchema = z.object({
-  kind: z.enum(['revolve', 'extrude', 'radial']).default('revolve').meta({ title: 'Transform' }),
+  kind: z.enum(Object.keys(TRANSFORMS) as [TransformId, ...TransformId[]]).default('revolve').meta({ title: 'Transform' }),
   // revolve
-  angleDeg: z.number().min(1).max(360).default(360).meta({ title: 'Angle', unit: '°', step: 1, when: { kind: ['revolve'] } }),
+  angleDeg: z.number().min(1).max(360).default(360).meta({ title: 'Angle', unit: '°', step: 1, sweep: true, when: { kind: ['revolve'] } }),
   offset: z.number().min(-2).max(2).default(0).meta({ title: 'Axis offset', step: 0.01, when: { kind: ['revolve'] } }),
   policy: z.enum(['clip', 'both', 'refuse']).default('clip').meta({ title: 'Crossing the axis', when: { kind: ['revolve'] } }),
   segments: z.number().int().min(8).max(256).default(96).meta({ title: 'Segments', when: { kind: ['revolve'] } }),
@@ -46,13 +46,14 @@ export const turned = defineGenre({
   id: 'turned',
   title: 'Turned components',
   description: 'One figure, split into parts; each part is revolved, extruded or arrayed, and coloured on its own.',
+  starter: { figure: { kind: 'shape', shape: 'star', n: 5, ratio: 0.5 } },
   slots: [{ id: 'figure', title: 'Figure', hint: 'An image, drawing or shape. Each separate component becomes a part.' }],
   params: TurnedParams,
   build(figures, params, { kernel: k }) {
     const figure = fitFigure(figures.figure, 2, 'contain');
     const b = figureBounds(figure);
     const axisX = params.axis;
-    const bodies: Array<{ partId: string; solid: Solid }> = [];
+    const bodies: Array<{ partId: string; solid: Solid; yields?: boolean }> = [];
     const slices: SlicePromise[] = [];
     const warnings: string[] = [];
     for (const part of figure.parts) {
@@ -82,7 +83,7 @@ export const turned = defineGenre({
         const m = 0.05;
         base = k.translate(k.box([bb.max[0] - bb.min[0] + 2 * m, bb.max[1] - bb.min[1] + 2 * m, th]), [bb.min[0] - m, bb.min[1] - m, bb.min[2] - th * 0.5]);
       }
-      bodies.push({ partId: 'base', solid: base });
+      bodies.push({ partId: 'base', solid: base, yields: true });
     }
     return { bodies, slices, warnings };
   },

@@ -9,7 +9,7 @@
 import type { Design } from './design.js';
 import { prepareParams } from './design.js';
 import { cleanFigure } from './figure.js';
-import { applyAffine, invertRigid } from './geometry/affine.js';
+import { affineFromColumns, applyAffine, invertRigid } from './geometry/affine.js';
 import type { Genre, GenreResult } from './genre.js';
 import type { Kernel, Region, Solid } from './kernel/types.js';
 import { sourceToFigure, type SourceResolvers } from './sources/index.js';
@@ -19,6 +19,9 @@ import { z } from 'zod';
 
 /** The table of genres, keyed by id. A plain object: adding a genre is adding an entry. */
 export type GenreTable = Record<string, Genre<any>>;
+
+/** A part that loses more than this share of its volume to earlier parts is reported. */
+const OVERLAP_SHARE = 0.01;
 
 /** Colours given to parts when the design asks for a palette. */
 export const PART_PALETTE = ['#d4763b', '#3b7dd4', '#4caf6d', '#c94f7c', '#e0b43a', '#7a5cc9', '#3aa9b0', '#8a8f3c', '#d45f3b', '#5a6b8c'];
@@ -85,9 +88,17 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     // Bodies are disjoint: earlier bodies win, so a multi-colour print has no overlapping volume.
     const bodies: Array<{ partId: string; solid: Solid; color?: string }> = [];
     let taken: Solid | null = null;
+    const trimmed = new Set<string>();
     for (const b of result.bodies) {
       let s = b.solid;
-      if (taken) s = kernel.subtract(s, taken);
+      if (taken) {
+        const before = kernel.volume(s);
+        s = kernel.subtract(s, taken);
+        if (!b.yields && before > 0 && kernel.volume(s) < before * (1 - OVERLAP_SHARE)) {
+          trimmed.add(b.partId);
+          warnings.push(`Part ${b.partId} overlaps earlier parts; the shared volume went to them.`);
+        }
+      }
       if (kernel.isEmpty(s)) continue;
       taken = taken ? kernel.union([taken, s]) : s;
       bodies.push({ ...b, solid: s });
@@ -98,7 +109,9 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
         diagnostics: { volume: 0, pieces: 0, genus: 0, bbox: { min: [0, 0, 0], max: [0, 0, 0] }, regions: [], warnings: [...warnings, 'The result is empty: nothing survives the operation.'] },
       };
     }
-    const all = taken;
+    // Measure the union of the solids as the genre made them: the disjoint bodies share faces
+    // exactly, and a union of exactly touching solids is not guaranteed to weld.
+    const all = kernel.union(result.bodies.map((b) => b.solid));
 
     // Size: the longest edge becomes design.sizeMm; the object stands on z = 0, centred in x and y.
     const gb = kernel.bbox(all);
@@ -116,7 +129,10 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     });
 
     const allMm = toMm(all);
-    const pieces = kernel.decompose(allMm).length;
+    // Components with negative volume are the shells of sealed cavities, not pieces.
+    const shells = kernel.decompose(allMm).map((c) => kernel.volume(c));
+    const pieces = shells.filter((v) => v > 0).length;
+    const cavities = shells.filter((v) => v < 0).length;
     const regions: PlanarRegion[] = [];
     const scalePolys = (ps: Polygon[]): Polygon[] =>
       ps.map((p) => ({ outer: p.outer.map(([x, y]) => [x * s, y * s]), holes: p.holes.map((h) => h.map(([x, y]) => [x * s, y * s])) }));
@@ -155,7 +171,7 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
     // Original-slice promises: the kernel's cut on the plane should give back the figure.
     for (const promise of result.slices ?? []) {
       const body = bodies.find((b) => b.partId === promise.partId);
-      if (!body) continue;
+      if (!body || trimmed.has(promise.partId)) continue;
       const cut = kernel.slice(kernel.transform(body.solid, promise.toPlane), 0);
       const diff = kernel.union2([kernel.subtract2(cut, promise.target), kernel.subtract2(promise.target, cut)]);
       const ta = kernel.area(promise.target);
@@ -174,15 +190,37 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
       });
     }
 
+    // Section: the kernel's cut of the whole object by the plane y = c (front to back), when the view asks.
+    if (design.view.section) {
+      const c = ((gb.min[1] + gb.max[1]) / 2) + design.view.sectionOffset * ((gb.max[1] - gb.min[1]) / 2);
+      const toPlane = SECTION_Y(c);
+      const cut = kernel.slice(kernel.transform(all, toPlane), 0);
+      const inv = invertRigid(toPlane);
+      regions.push({
+        id: 'section',
+        label: 'section',
+        polygons: scalePolys(kernel.polygons(cut)),
+        origin: place(applyAffine(inv, [0, 0, 0])),
+        u: sub(applyAffine(inv, [1, 0, 0]), applyAffine(inv, [0, 0, 0])),
+        v: sub(applyAffine(inv, [0, 1, 0]), applyAffine(inv, [0, 0, 0])),
+        role: 'section',
+      });
+    }
+
+    if (cavities > 0) warnings.push(`${cavities} sealed internal cavit${cavities > 1 ? 'ies' : 'y'}: resin and powder processes trap material there.`);
     if (pieces > 1) warnings.push(`${pieces} separate pieces. A printed object would fall apart; see the genre's fixes.`);
     const bb = kernel.bbox(allMm);
     return {
       bodies: outBodies,
-      diagnostics: { volume: kernel.volume(allMm), pieces, genus: kernel.genus(allMm), bbox: bb, regions, shadows: shadows.length ? shadows : undefined, warnings },
+      union: outBodies.length > 1 ? kernel.mesh(allMm) : undefined,
+      diagnostics: { volume: kernel.volume(allMm), pieces, cavities, genus: kernel.genus(allMm), bbox: bb, regions, shadows: shadows.length ? shadows : undefined, warnings },
     };
   });
   model.diagnostics.buildMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
   return model;
 }
+
+/** Model -> plane coordinates for the plane y = c, seen from the front: (x, z, -(y - c)). */
+const SECTION_Y = (c: number) => affineFromColumns([1, 0, 0], [0, 0, -1], [0, 1, 0], [0, 0, c]);
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];

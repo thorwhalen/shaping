@@ -4,30 +4,73 @@
   "description": "Turn 2D figures into parametrized 3D solids: a core with pluggable genres (turned components, shadow blocks), a solid kernel on Manifold, and exporters (3MF, STL, GLB, PLY, OBJ, SVG, DXF).",
   "license": "MIT",
   "type": "module",
-  "repository": { "type": "git", "url": "git+https://github.com/thorwhalen/shaping.git", "directory": "packages/shaping" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thorwhalen/shaping.git",
+    "directory": "packages/shaping"
+  },
   "homepage": "https://apps.thorwhalen.com/shaping/",
-  "keywords": ["3d", "extrude", "revolve", "lathe", "shadow", "trip-let", "manifold", "3mf", "stl", "csg", "3d-printing", "laser"],
-  "files": ["dist", "README.md"],
+  "keywords": [
+    "3d",
+    "extrude",
+    "revolve",
+    "lathe",
+    "shadow",
+    "trip-let",
+    "manifold",
+    "3mf",
+    "stl",
+    "csg",
+    "3d-printing",
+    "laser"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./genres/shadow-blocks": { "types": "./dist/genres/shadow-blocks.d.ts", "default": "./dist/genres/shadow-blocks.js" },
-    "./genres/turned": { "types": "./dist/genres/turned.d.ts", "default": "./dist/genres/turned.js" },
-    "./export": { "types": "./dist/export/index.d.ts", "default": "./dist/export/index.js" },
-    "./imaging": { "types": "./dist/imaging/index.d.ts", "default": "./dist/imaging/index.js" },
-    "./animate": { "types": "./dist/animate/index.d.ts", "default": "./dist/animate/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./genres/shadow-blocks": {
+      "types": "./dist/genres/shadow-blocks.d.ts",
+      "default": "./dist/genres/shadow-blocks.js"
+    },
+    "./genres/turned": {
+      "types": "./dist/genres/turned.d.ts",
+      "default": "./dist/genres/turned.js"
+    },
+    "./export": {
+      "types": "./dist/export/index.d.ts",
+      "default": "./dist/export/index.js"
+    },
+    "./imaging": {
+      "types": "./dist/imaging/index.d.ts",
+      "default": "./dist/imaging/index.js"
+    },
+    "./animate": {
+      "types": "./dist/animate/index.d.ts",
+      "default": "./dist/animate/index.js"
+    }
   },
-  "bin": { "shaping": "./dist/cli.js" },
+  "bin": {
+    "shaping": "./dist/cli.js"
+  },
   "sideEffects": false,
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node -e \"require('fs').chmodSync('dist/cli.js',0o755)\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "fast-png": "^8.0.0",
     "fflate": "^0.8.3",
+    "jpeg-js": "^0.4.4",
     "manifold-3d": "3.5.4",
+    "perfect-freehand": "^1.2.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {

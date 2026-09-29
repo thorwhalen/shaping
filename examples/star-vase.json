@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "star-vase",
+  "title": "Star vase",
+  "description": "A five-pointed star, revolved about its centre line: the star is the vase's cross-section through the axis.",
+  "genre": "turned",
+  "sources": { "figure": { "kind": "shape", "shape": "star", "n": 5, "ratio": 0.45 } },
+  "params": { "axis": 0, "transform": { "kind": "revolve", "policy": "clip", "segments": 128 } },
+  "sizeMm": 60,
+  "style": { "material": "glossy", "color": "#3b7dd4" },
+  "view": { "elevationDeg": 20 }
+}

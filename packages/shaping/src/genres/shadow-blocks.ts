@@ -52,7 +52,7 @@ export const ShadowParams = z.object({
   frame: z.enum(['none', 'border', 'base-bar']).default('none').meta({ title: 'Frame' }),
   frameWidth: z.number().min(0.02).max(0.5).default(0.12).meta({ title: 'Frame width', step: 0.01 }),
   /** Grow every figure outward before intersecting (thin strokes make fragile solids). */
-  thicken: z.number().min(0).max(0.3).default(0).meta({ title: 'Thicken', step: 0.005 }),
+  thicken: z.number().min(0).max(0.3).default(0).meta({ title: 'Thicken', step: 0.005, sweep: true }),
   /** Drop pieces smaller than this share of the largest piece's volume. */
   dropDust: z.number().min(0).max(1).default(0.01).meta({ title: 'Drop small pieces', step: 0.005 }),
   keepLargest: z.boolean().default(false).meta({ title: 'Keep only the largest piece' }),
@@ -76,6 +76,11 @@ export const shadowBlocks = defineGenre({
   id: 'shadow-blocks',
   title: 'Shadow blocks',
   description: 'One solid whose three shadows are three figures: the trip-let on the cover of Gödel, Escher, Bach.',
+  starter: {
+    front: { kind: 'text', text: 'G', round: 0.15, spacing: 1 },
+    side: { kind: 'text', text: 'E', round: 0.15, spacing: 1 },
+    top: { kind: 'text', text: 'B', round: 0.15, spacing: 1 },
+  },
   slots: [
     { id: 'front', title: 'Front shadow', hint: 'Seen from the front, on the back wall.' },
     { id: 'side', title: 'Side shadow', hint: 'Seen from the right, on the left wall.' },
@@ -126,13 +131,13 @@ export const shadowBlocks = defineGenre({
       }
     }
 
-    const bodies = [{ partId: 'solid', solid }];
+    const bodies: Array<{ partId: string; solid: Solid; yields?: boolean }> = [{ partId: 'solid', solid }];
     if (params.basePlate && !k.isEmpty(solid)) {
       const bb = k.bbox(solid);
       const th = params.baseThickness;
       const m = 0.05;
       const plate = k.translate(k.box([bb.max[0] - bb.min[0] + 2 * m, bb.max[1] - bb.min[1] + 2 * m, th]), [bb.min[0] - m, bb.min[1] - m, bb.min[2] - th * 0.5]);
-      bodies.push({ partId: 'base', solid: plate });
+      bodies.push({ partId: 'base', solid: plate, yields: true });
     }
     // The shadows are promised by the block alone; a base plate is not part of the illusion.
     const shadows: ShadowPromise[] = SLOT_IDS.map((v) => ({ slot: v, label: v, toView: VIEWS[v], target: regions[v], excludeParts: ['base'] }));

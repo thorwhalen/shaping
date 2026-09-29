@@ -6,4 +6,6 @@
 
 **Consequences.** Every solid is manifold by construction, so there is no repair step. Anything shown can be exported. A new genre is one file. The cost is that every geometric operation must be expressed through the kernel or handed to it as a closed mesh, which rules out viewer-only effects.
 
+**Known limit (2026-09-29 review).** Exporters receive meshes only. True STEP output from a B-rep kernel will need the `Model` to carry the kernel's native solid (or a handle to rebuild it), which changes `build` and `Model`; it is the one listed future change that does not arrive at an existing seam.
+
 Status: accepted, 2026-09-29. Also recorded in `docs/architecture.md`.
