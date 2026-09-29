@@ -25,6 +25,34 @@ export const captureRef: { current: ((r: CaptureRequest) => Promise<ImageData>) 
 /** Swaps what the scene shows (for capture) and waits until it has been drawn. */
 const frameOverride: { set: ((o: { design: Design; model: Model } | null) => void) | null } = { set: null };
 
+/** The object never shrinks below this many pixels across when zooming out. */
+export const MIN_OBJECT_PX = 90;
+/** The camera never comes closer to the centre than this many model radii. */
+const MIN_DISTANCE_RADII = 1.1;
+const DEFAULT_FOV_DEG = 35;
+
+/**
+ * Where the camera looks from: the unit vector from the orbit target to the camera, in scene
+ * coordinates, published as the user orbits so overlays (the light ball) stay aligned with the view.
+ */
+export const cameraView = (() => {
+  let dir: [number, number, number] = [0, 0, 1];
+  const subs = new Set<() => void>();
+  return {
+    get: () => dir,
+    set(camera: THREE.Camera, target: THREE.Vector3) {
+      const v = camera.position.clone().sub(target).normalize();
+      if (v.distanceTo(new THREE.Vector3(...dir)) < 1e-3) return;
+      dir = [v.x, v.y, v.z];
+      subs.forEach((f) => f());
+    },
+    subscribe(f: () => void) {
+      subs.add(f);
+      return () => void subs.delete(f);
+    },
+  };
+})();
+
 function CameraRig({ design, model, resetKey }: { design: Design; model: Model; resetKey: number }) {
   const controls = useRef<React.ComponentRef<typeof OrbitControls>>(null);
   const { camera } = useThree();
@@ -41,9 +69,26 @@ function CameraRig({ design, model, resetKey }: { design: Design; model: Model; 
     camera.updateProjectionMatrix();
     controls.current?.target.set(...pose.target);
     controls.current?.update();
+    if (controls.current) cameraView.set(camera, controls.current.target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.azimuthDeg, v.elevationDeg, v.camera, resetKey, camera]);
-  return <OrbitControls ref={controls} makeDefault enableDamping dampingFactor={0.12} />;
+  // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
+  const { size } = useThree();
+  const fov = camera instanceof THREE.PerspectiveCamera ? camera.fov : DEFAULT_FOV_DEG;
+  const maxDistance = (r * size.height) / (MIN_OBJECT_PX * Math.tan(((fov / 2) * Math.PI) / 180));
+  const minZoom = MIN_OBJECT_PX / (2 * r);
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      enableDamping
+      dampingFactor={0.12}
+      minDistance={r * MIN_DISTANCE_RADII}
+      maxDistance={maxDistance}
+      minZoom={minZoom}
+      onChange={() => controls.current && cameraView.set(camera, controls.current.target)}
+    />
+  );
 }
 
 function Capture() {
@@ -108,7 +153,7 @@ export function Viewer({ design, model, busy, resetKey, showSlices, override, se
       >
         <color attach="background" args={[shown?.design.style.background ?? design.style.background]} />
         {design.view.camera === 'orthographic' ? <OrthographicCamera makeDefault position={[0, 0, 100]} /> : <PerspectiveCamera makeDefault fov={35} position={[0, 0, 100]} />}
-        <Environment resolution={128}>
+        <Environment resolution={128} environmentIntensity={design.view.environmentIntensity} environmentRotation={[0, (design.view.lightAzimuthDeg * Math.PI) / 180, 0]}>
           <Lightformer intensity={2} position={[0, 5, -9]} scale={[10, 10, 1]} />
           <Lightformer intensity={1.2} position={[-5, 1, -1]} rotation-y={Math.PI / 2} scale={[10, 2, 1]} />
           <Lightformer intensity={1.2} position={[5, 1, -1]} rotation-y={-Math.PI / 2} scale={[10, 2, 1]} />

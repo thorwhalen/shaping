@@ -130,3 +130,27 @@ describe('review regressions', () => {
     expect(() => exportModel(empty, 'glb')).toThrow(/empty/);
   });
 });
+
+describe('buildKey', () => {
+  it('ignores display-only fields and sees the ones the build reads', async () => {
+    const { buildKey, parseDesign } = await import('../index.js');
+    const d = parseDesign(example('triplet'));
+    const k = buildKey(d);
+    expect(buildKey({ ...d, view: { ...d.view, lightAzimuthDeg: 120, azimuthDeg: 200, camera: 'orthographic' } })).toBe(k);
+    expect(buildKey({ ...d, style: { ...d.style, material: 'glass', opacity: 0.5 } })).toBe(k);
+    expect(buildKey({ ...d, view: { ...d.view, wallGap: 1.5 } })).not.toBe(k);
+    expect(buildKey({ ...d, style: { ...d.style, color: '#000000' } })).not.toBe(k);
+  });
+
+  it('the build really ignores every field tagged render (guards the tags)', async () => {
+    const { parseDesign } = await import('../index.js');
+    const d = parseDesign(example('nested-rings'));
+    const base = await build(d, { kernel });
+    const changed = await build(
+      { ...d, view: { ...d.view, camera: 'orthographic', azimuthDeg: 99, elevationDeg: -10, walls: false, ground: false, lightAzimuthDeg: 3, lightElevationDeg: 7, lightIntensity: 0.1, lightColor: '#ff0000', fillIntensity: 1, environmentIntensity: 1 }, style: { ...d.style, material: 'glass', opacity: 0.3, roughness: 0.9, metalness: 0.9, background: '#000000' } },
+      { kernel },
+    );
+    expect(changed.bodies.map((b) => [b.color, b.positions.length])).toEqual(base.bodies.map((b) => [b.color, b.positions.length]));
+    expect(changed.diagnostics.regions).toEqual(base.diagnostics.regions);
+  });
+});

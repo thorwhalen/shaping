@@ -138,33 +138,37 @@ export const PrepareSchema = z.object({
 export const MATERIAL_PRESETS = ['matte', 'glossy', 'brushed-metal', 'polished-metal', 'glass', 'resin'] as const;
 
 export const StyleSchema = z.object({
-  material: z.enum(MATERIAL_PRESETS).default('glossy').meta({ title: 'Material' }),
+  material: z.enum(MATERIAL_PRESETS).default('glossy').meta({ render: true, title: 'Material' }),
   color: z.string().default('#d4763b').meta({ title: 'Colour' }),
   /** Colour per part id; parts not listed use `color` or the palette. */
   partColors: z.record(z.string(), z.string()).default({}),
   /** Use a distinct palette colour per part when no colour is given. */
   palette: z.boolean().default(true).meta({ title: 'Colour parts' }),
-  opacity: z.number().min(0.05).max(1).default(1).meta({ title: 'Opacity', step: 0.05 }),
-  roughness: z.number().min(0).max(1).nullable().default(null).meta({ title: 'Roughness', step: 0.05 }),
-  metalness: z.number().min(0).max(1).nullable().default(null).meta({ title: 'Metalness', step: 0.05 }),
-  background: z.string().default('#f4f1ea').meta({ title: 'Background' }),
+  opacity: z.number().min(0.05).max(1).default(1).meta({ render: true, title: 'Opacity', step: 0.05 }),
+  roughness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Roughness', step: 0.05 }),
+  metalness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Metalness', step: 0.05 }),
+  background: z.string().default('#f4f1ea').meta({ render: true, title: 'Background' }),
 });
 
 export const ViewSchema = z.object({
-  camera: z.enum(['perspective', 'orthographic']).default('perspective'),
+  camera: z.enum(['perspective', 'orthographic']).default('perspective').meta({ render: true }),
   /** Camera azimuth and elevation, in degrees. Animatable. */
-  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ title: 'Azimuth', unit: '°' }),
-  elevationDeg: z.number().min(-89).max(89).default(25).meta({ title: 'Elevation', unit: '°' }),
+  azimuthDeg: z.number().min(-360).max(720).default(35).meta({ render: true, title: 'Azimuth', unit: '°' }),
+  elevationDeg: z.number().min(-89).max(89).default(25).meta({ render: true, title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
-  walls: z.boolean().default(true).meta({ title: 'Shadow walls' }),
+  walls: z.boolean().default(true).meta({ render: true, title: 'Shadow walls' }),
   /** Distance of the shadow walls from the object, as a share of its size. */
   wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { walls: [true] } }),
-  ground: z.boolean().default(true).meta({ title: 'Ground shadow' }),
+  ground: z.boolean().default(true).meta({ render: true, title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
-  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ title: 'Light azimuth', unit: '°' }),
-  lightElevationDeg: z.number().min(0).max(90).default(55).meta({ title: 'Light elevation', unit: '°' }),
-  lightIntensity: z.number().min(0).max(6).default(2.2).meta({ title: 'Light', step: 0.1 }),
-  lightColor: z.string().default('#ffffff').meta({ title: 'Light colour' }),
+  lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ render: true, title: 'Light azimuth', unit: '°' }),
+  lightElevationDeg: z.number().min(0).max(90).default(55).meta({ render: true, title: 'Light elevation', unit: '°' }),
+  lightIntensity: z.number().min(0).max(6).default(2.2).meta({ render: true, title: 'Light', step: 0.1 }),
+  lightColor: z.string().default('#ffffff').meta({ render: true, title: 'Light colour' }),
+  /** Light that comes from everywhere (fills the shadows). Low, so the sun dominates. */
+  fillIntensity: z.number().min(0).max(2).default(0.25).meta({ render: true, title: 'Fill light', step: 0.05 }),
+  /** Strength of the studio reflections, which turn with the sun. */
+  environmentIntensity: z.number().min(0).max(2).default(0.45).meta({ render: true, title: 'Reflections', step: 0.05 }),
   /** Clip the solid with a plane and show the kernel's slice on it. */
   section: z.boolean().default(false).meta({ title: 'Section' }),
   sectionOffset: z.number().min(-1).max(1).default(0).meta({ title: 'Section position', step: 0.01 }),
@@ -239,6 +243,25 @@ export type FlatAction = z.infer<typeof FlatActionSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
 export type Design = z.infer<typeof DesignSchema>;
 export type DesignInput = z.input<typeof DesignSchema>;
+
+/** Keys of an object schema whose fields carry `.meta({ render: true })`: display only, never geometry. */
+function renderOnlyKeys(schema: z.ZodObject<z.ZodRawShape>): string[] {
+  return Object.entries(schema.shape)
+    .filter(([, f]) => (z.globalRegistry.get(f as z.ZodType) as { render?: boolean } | undefined)?.render)
+    .map(([k]) => k);
+}
+const RENDER_VIEW = renderOnlyKeys(ViewSchema);
+const RENDER_STYLE = renderOnlyKeys(StyleSchema);
+const omit = (o: Record<string, unknown>, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
+
+/**
+ * Everything in a design that can change its Model, as a string: two designs with the same key
+ * build the same Model. Fields tagged `render` in the schema (camera, light, material) are left out,
+ * so turning them never triggers a rebuild. A test guards the tags against `build` reading them.
+ */
+export function buildKey(d: Design): string {
+  return JSON.stringify([d.genre, d.sources, d.prepare, d.params, d.sizeMm, omit(d.view, RENDER_VIEW), omit(d.style, RENDER_STYLE)]);
+}
 
 /** Format a Zod error so it names the field: `sources.x.kind: Invalid input`. */
 export function formatIssues(error: z.ZodError): string {

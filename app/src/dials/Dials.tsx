@@ -6,6 +6,7 @@
  */
 import { useMemo } from 'react';
 import { z } from 'zod';
+import { Slider } from './Slider';
 
 type JS = {
   type?: string | string[];
@@ -123,16 +124,15 @@ function Field({ name, path, schema, value, siblings, onChange }: { name: string
         </label>
       ) : undefined}>
         <div className="flex items-center gap-2">
-          <input
-            type="range"
-            aria-label={title}
-            className="w-full accent-[var(--color-accent)]"
+          <Slider
+            label={title}
             min={min}
             max={max}
             step={step}
             value={shown}
             disabled={isAuto}
-            onChange={(e) => onChange(path, type === 'integer' ? Math.round(Number(e.target.value)) : Number(e.target.value))}
+            restGhost={typeof base.default === 'number' ? base.default : undefined}
+            onChange={(v) => onChange(path, type === 'integer' ? Math.round(v) : v)}
           />
           <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">
             {isAuto ? 'auto' : formatNumber(shown, step)}

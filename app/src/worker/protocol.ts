@@ -23,4 +23,6 @@ export type Response =
   | { kind: 'mask'; id: number; slot: string; preview: MaskPreview }
   | { kind: 'build'; id: number; model: Model }
   | { kind: 'export'; id: number; bytes: Uint8Array }
-  | { kind: 'error'; id: number; request: Request['kind']; message: string };
+  | { kind: 'error'; id: number; request: Request['kind']; message: string }
+  /** The request was replaced by a newer one of the same kind before it ran. */
+  | { kind: 'dropped'; id: number };

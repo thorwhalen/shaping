@@ -80,7 +80,10 @@ async function pump() {
 }
 
 self.onmessage = (ev: MessageEvent<Request>) => {
-  pending.set(keyOf(ev.data), ev.data);
+  const key = keyOf(ev.data);
+  const replaced = pending.get(key);
+  if (replaced) post({ kind: 'dropped', id: replaced.id });
+  pending.set(key, ev.data);
   void pump();
 };
 

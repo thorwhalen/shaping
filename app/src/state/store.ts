@@ -5,7 +5,7 @@
  * turning a genre dial never re-traces an image.
  */
 import { produce } from 'immer';
-import { prepareParams, type Design, type Figure, type Model } from 'shaping';
+import { buildKey, prepareParams, type Design, type Figure, type Model } from 'shaping';
 import { genres } from '../genres';
 import { create } from 'zustand';
 import type { MaskPreview } from '../worker/protocol';
@@ -59,42 +59,59 @@ export function flushSave() {
 if (typeof addEventListener !== 'undefined') addEventListener('pagehide', flushSave);
 
 export const useApp = create<AppState>()((set, get) => {
-  /** Resolve missing figures, then rebuild. Called after every change of the design. */
+  let refreshSeq = 0;
+  let appliedSeq = 0;
+  let builtKey = '';
+
+  /**
+   * Resolve missing figures, then rebuild. Called after every change of the design. Every call gets
+   * a sequence number; a result is applied when it is newer than the one on screen, so while a dial
+   * is dragged each finished intermediate model shows (live feedback) and the last one wins.
+   * Changes that do not touch geometry (camera, light, material) skip the rebuild entirely.
+   */
   async function refresh() {
     const d = get().design;
     if (!d) return;
     const genre = genres[d.genre];
     if (!genre) return set({ error: `Unknown genre "${d.genre}".` });
+    const key = buildKey(d);
+    if (key === builtKey && get().model) return;
+    const seq = ++refreshSeq;
     set({ stale: true });
     clearTimeout(busyTimer);
     busyTimer = setTimeout(() => get().stale && set({ busy: true }), BUSY_AFTER_MS);
 
-    const resolving = genre.slots.map(async (slot) => {
-      const key = figureKey(d, slot.id);
-      const have = get().figures[slot.id];
-      if (have && have.key === key && have.figure) return;
-      try {
-        const figure = await geometry().resolve(slot.id, d.sources[slot.id], prepareParams(d, slot.id));
-        if (figure) set((s) => ({ figures: { ...s.figures, [slot.id]: { key, figure, error: null } } }));
-      } catch (e) {
-        set((s) => ({ figures: { ...s.figures, [slot.id]: { key, figure: null, error: (e as Error).message } } }));
-      }
-    });
-    await Promise.all(resolving);
-    if (get().design !== d) return; // superseded while resolving
-
+    await Promise.all(
+      genre.slots.map(async (slot) => {
+        const fkey = figureKey(d, slot.id);
+        const have = get().figures[slot.id];
+        if (have && have.key === fkey && have.figure) return;
+        try {
+          const figure = await geometry().resolve(slot.id, d.sources[slot.id], prepareParams(d, slot.id));
+          if (figure) set((s) => ({ figures: { ...s.figures, [slot.id]: { key: fkey, figure, error: null } } }));
+        } catch (e) {
+          set((s) => ({ figures: { ...s.figures, [slot.id]: { key: fkey, figure: null, error: (e as Error).message } } }));
+        }
+      }),
+    );
+    const latest = () => seq === refreshSeq;
+    const done = () => latest() && set({ stale: false, busy: false });
     const figs = get().figures;
     const missing = genre.slots.filter((s) => !figs[s.id]?.figure || figs[s.id].key !== figureKey(d, s.id));
     if (missing.length) {
-      const why = missing.map((s) => figs[s.id]?.error).filter(Boolean).join(' ');
-      return set({ stale: false, busy: false, error: why || null });
+      // A newer figure replaced this one: the newer refresh will build. Report errors only when latest.
+      if (latest()) set({ stale: false, busy: false, error: missing.map((s) => figs[s.id]?.error).filter(Boolean).join(' ') || null });
+      return;
     }
     try {
       const model = await geometry().build(d, Object.fromEntries(genre.slots.map((s) => [s.id, figs[s.id].figure!])));
-      if (!model || get().design !== d) return;
-      set({ model, stale: false, busy: false, error: null });
+      if (!model || seq < appliedSeq) return;
+      appliedSeq = seq;
+      builtKey = key;
+      set({ model, error: null });
+      done();
     } catch (e) {
-      if (get().design === d) set({ stale: false, busy: false, error: (e as Error).message });
+      if (latest()) set({ stale: false, busy: false, error: (e as Error).message });
     }
   }
 
@@ -119,6 +136,7 @@ export const useApp = create<AppState>()((set, get) => {
     open(design) {
       flushSave();
       const slot = design ? (genres[design.genre]?.slots[0]?.id ?? '') : '';
+      builtKey = '';
       set({ design, model: null, figures: {}, masks: {}, error: null, activeSlot: slot });
       if (design) changed();
     },

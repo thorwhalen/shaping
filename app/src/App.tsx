@@ -13,7 +13,11 @@ import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
 import { cameFromApp, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
+import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
+
+/** An angle in (-180, 180]. */
+const wrapDegrees = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 
 const PANELS = [
   { id: 'source', label: 'Source' },
@@ -88,6 +92,15 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
   const [resetKey, setResetKey] = useState(0);
   const [showSlices, setShowSlices] = useState(false);
   const [override, setOverride] = useState<{ design: Design; model: Model } | null>(null);
+  const setLight = useCallback(
+    (az: number, el: number) =>
+      edit((d) => {
+        d.view.lightAzimuthDeg = wrapDegrees(az);
+        d.view.lightElevationDeg = el;
+      }),
+    [edit],
+  );
+  const shiftDrag = useShiftDragLight(design.view, setLight);
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -112,10 +125,11 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
           {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} setOverride={setOverride} />}
         </div>
       </aside>
-      <main className="relative min-h-[50vh] flex-1">
+      <main className="relative min-h-[50vh] flex-1" {...shiftDrag}>
         <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
+          <LightBall view={design.view} onChange={setLight} />
         </Viewer>
         <StatusBar model={model} error={error} profileId={profileId} />
       </main>
