@@ -1,16 +1,12 @@
 /**
- * Everything that leaves the app: files for printing, viewing and laser work (built from the
- * exporters table), and stills, GIFs and videos rendered frame by frame at the export size. An
- * animation that changes the solid rebuilds the model for every frame: the file shows exactly
- * what would be exported at that moment, never a screen effect.
+ * Everything that leaves the app as a file: printing, viewing and laser files (built from the
+ * exporters table, recoloured as shown), and a picture of the view. Animations (GIF, video) are made
+ * in the Animate panel, through previz.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_PROFILE, getPath, PROFILES, type Design, type Model, recolor } from 'shaping';
-import { genres } from '../genres';
-import { z } from 'zod';
-import { designAt, frameCount, rebuildsGeometry, sweep, turntable } from 'shaping/animate';
+import { useMemo, useState } from 'react';
+import { DEFAULT_PROFILE, PROFILES, type Design, type Model, recolor } from 'shaping';
 import { exporters, exportFileName, type Operation } from 'shaping/export';
-import { encodeGif, encodeVideo, pickSaveHandle, saveBytes, supportsVideo } from '../media';
+import { pickSaveHandle, saveBytes } from '../media/png';
 import { useApp } from '../state/store';
 import { captureRef } from '../viewer/Viewer';
 import { geometry } from '../worker/client';
@@ -18,7 +14,7 @@ import { geometry } from '../worker/client';
 /** Export sizes offered for images and videos, in pixels. */
 const MEDIA_SIZES = [480, 720, 1080] as const;
 
-export function OutputPanel({ profileId, setProfileId, setOverride }: { profileId: string; setProfileId: (id: string) => void; setOverride: (o: { design: Design; model: Model } | null) => void }) {
+export function OutputPanel({ profileId, setProfileId }: { profileId: string; setProfileId: (id: string) => void }) {
   const design = useApp((s) => s.design)!;
   const model = useApp((s) => s.model);
   const edit = useApp((s) => s.edit);
@@ -97,166 +93,44 @@ export function OutputPanel({ profileId, setProfileId, setOverride }: { profileI
         </details>
       </section>
 
-      <MediaSection design={design} model={model} setOverride={setOverride} setStatus={setStatus} />
+      <StillSection design={design} model={model} setStatus={setStatus} />
 
       {status && <p className="text-xs text-muted" aria-live="polite">{status}</p>}
     </div>
   );
 }
 
-function MediaSection({ design, model, setOverride, setStatus }: { design: Design; model: Model | null; setOverride: (o: { design: Design; model: Model } | null) => void; setStatus: (s: string | null) => void }) {
-  const figures = useApp((s) => s.figures);
-  const [kind, setKind] = useState<'turntable' | 'sweep'>('turntable');
-  const [seconds, setSeconds] = useState(4);
-  const [fps, setFps] = useState(24);
-  const [size, setSize] = useState<number>(MEDIA_SIZES[0]);
-  const [sweepPath, setSweepPath] = useState<string>('');
-  const [progress, setProgress] = useState<number | null>(null);
-  const sweepables = useSweepables(design);
-  const previewRun = useRef(0);
-  const chosen = sweepables.find((s) => s.path === sweepPath) ?? sweepables[0];
-
-  const animation = kind === 'turntable' || !chosen
-    ? turntable(design, { seconds, fps })
-    : sweep(design, { target: 'params', property: chosen.path, from: chosen.min, to: chosen.max, seconds, fps, pingPong: true });
-
-  async function render(format: 'gif' | 'video' | 'png') {
-    if (!model || !captureRef.current) return;
+/** A still of the view, at the viewer's shape (or square), rendered by the same capture as every export. */
+function StillSection({ design, model, setStatus }: { design: Design; model: Model | null; setStatus: (s: string | null) => void }) {
+  const [height, setHeight] = useState<number>(STILL_HEIGHTS[1]);
+  const [transparent, setTransparent] = useState(false);
+  async function still() {
     const capture = captureRef.current;
-    const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
-    const geometric = rebuildsGeometry(animation);
-    const at = withDefaults(design, animation);
-    const frame = async (i: number) => {
-      const d = designAt(at, i / animation.fps);
-      const m = geometric ? await geometry().build(d, figs, 'frame') : model;
-      if (!m) throw new Error('A frame could not be built.');
-      return capture({ design: d, model: m, width: size, height: size });
-    };
-    const base = design.title.replace(/[^\w-]+/g, '-').toLowerCase();
-    try {
-      if (format === 'png') {
-        const img = await capture({ design, model, width: size * 2, height: size * 2, transparent: true });
-        const c = new OffscreenCanvas(img.width, img.height);
-        c.getContext('2d')!.putImageData(img, 0, 0);
-        await saveBytes(await c.convertToBlob({ type: 'image/png' }), `${base}.png`, 'image/png');
-        setStatus(`Saved ${base}.png.`);
-        return;
-      }
-      const count = frameCount(animation);
-      const name = format === 'gif' ? `${base}.gif` : `${base}.mp4`;
-      const handle = await pickSaveHandle(name, format === 'gif' ? 'image/gif' : 'video/mp4');
-      setProgress(0);
-      if (format === 'gif') {
-        const bytes = await encodeGif(frame, { count, fps: animation.fps, onProgress: setProgress });
-        await saveBytes(bytes, name, 'image/gif', handle);
-        setStatus(`Saved ${name}: ${count} frames.`);
-      } else {
-        const v = await encodeVideo(frame, { count, fps: animation.fps, width: size, height: size, onProgress: setProgress });
-        const vname = `${base}.${v.extension}`;
-        await saveBytes(v.bytes, vname, v.mimeType, v.extension === 'mp4' ? handle : null);
-        setStatus(`Saved ${vname}: ${count} frames.`);
-      }
-    } catch (e) {
-      setStatus((e as Error).message);
-    } finally {
-      setOverride(null);
-      setProgress(null);
-    }
+    if (!model || !capture) return;
+    const c = document.querySelector('main canvas') as HTMLCanvasElement | null;
+    const aspect = c && c.clientHeight ? c.clientWidth / c.clientHeight : 1;
+    const width = Math.round(height * aspect);
+    const img = await capture({ design, model: recolor(model, design.style), width, height, transparent });
+    const oc = new OffscreenCanvas(img.width, img.height);
+    oc.getContext('2d')!.putImageData(img, 0, 0);
+    const base = design.title.replace(/[^\w-]+/g, '-').toLowerCase() || 'shaping';
+    await saveBytes(await oc.convertToBlob({ type: 'image/png' }), `${base}.png`, 'image/png');
+    setStatus(`Saved ${base}.png (${width} × ${height}).`);
   }
-
-  async function preview() {
-    if (!model) return;
-    const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
-    const geometric = rebuildsGeometry(animation);
-    const at = withDefaults(design, animation);
-    const count = frameCount(animation);
-    setProgress(0);
-    const run = ++previewRun.current;
-    try {
-      for (let i = 0; i <= count && previewRun.current === run; i++) {
-        const d = designAt(at, (i % count) / animation.fps);
-        const m = geometric ? await geometry().build(d, figs, 'frame') : model;
-        if (m) setOverride({ design: d, model: m });
-        await new Promise((r) => setTimeout(r, 1000 / animation.fps));
-        setProgress(i / count);
-      }
-    } catch (e) {
-      setStatus((e as Error).message);
-    } finally {
-      setOverride(null);
-      setProgress(null);
-    }
-  }
-  // Leaving the panel stops a running preview.
-  useEffect(() => () => void previewRun.current++, []);
-
-  const busy = progress !== null;
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold">Images and animation</h3>
-      <div className="flex gap-1">
-        {(['turntable', 'sweep'] as const).map((k) => (
-          <button key={k} onClick={() => setKind(k)} disabled={k === 'sweep' && !sweepables.length} className={`rounded border px-2 py-0.5 text-xs ${kind === k ? 'border-accent bg-accent text-white' : 'border-line bg-white'} disabled:opacity-40`}>
-            {k === 'turntable' ? 'Turntable' : 'Parameter sweep'}
-          </button>
-        ))}
+      <h3 className="text-sm font-semibold">Picture</h3>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <select aria-label="Picture height" value={height} onChange={(e) => setHeight(Number(e.target.value))} className="rounded border border-line bg-white px-1">
+          {STILL_HEIGHTS.map((h) => <option key={h} value={h}>{h}px</option>)}
+        </select>
+        <label className="flex items-center gap-1"><input type="checkbox" checked={transparent} onChange={(e) => setTransparent(e.target.checked)} /> transparent</label>
+        <button disabled={!model} onClick={() => void still()} className="rounded border border-line bg-white px-2 py-1 hover:border-muted disabled:opacity-50">PNG</button>
       </div>
-      {kind === 'sweep' && chosen && (
-        <label className="flex items-center justify-between text-sm">
-          Dial
-          <select className="max-w-[60%] rounded border border-line bg-white px-1 text-xs" value={chosen.path} onChange={(e) => setSweepPath(e.target.value)}>
-            {sweepables.map((s) => (
-              <option key={s.path} value={s.path}>{s.title} ({s.min} → {s.max})</option>
-            ))}
-          </select>
-        </label>
-      )}
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <label className="flex flex-col">Seconds<input type="number" min={1} max={30} value={seconds} onChange={(e) => setSeconds(Math.max(1, Number(e.target.value)))} className="rounded border border-line bg-white px-1" /></label>
-        <label className="flex flex-col">FPS<input type="number" min={6} max={60} value={fps} onChange={(e) => setFps(Math.max(6, Number(e.target.value)))} className="rounded border border-line bg-white px-1" /></label>
-        <label className="flex flex-col">Size<select value={size} onChange={(e) => setSize(Number(e.target.value))} className="rounded border border-line bg-white px-1">{MEDIA_SIZES.map((s) => <option key={s} value={s}>{s}px</option>)}</select></label>
-      </div>
-      <div className="flex flex-wrap gap-1">
-        <button disabled={!model || busy} onClick={() => void preview()} className="rounded border border-line bg-white px-2 py-1 text-xs hover:border-muted disabled:opacity-50">Play</button>
-        <button disabled={!model || busy} onClick={() => void render('png')} className="rounded border border-line bg-white px-2 py-1 text-xs hover:border-muted disabled:opacity-50">PNG</button>
-        <button disabled={!model || busy} onClick={() => void render('gif')} className="rounded border border-line bg-white px-2 py-1 text-xs hover:border-muted disabled:opacity-50">GIF</button>
-        <button disabled={!model || busy || !supportsVideo()} title={supportsVideo() ? '' : 'This browser has no WebCodecs; use a GIF.'} onClick={() => void render('video')} className="rounded border border-line bg-white px-2 py-1 text-xs hover:border-muted disabled:opacity-50">Video</button>
-      </div>
-      {busy && (
-        <div className="h-1.5 w-full overflow-hidden rounded bg-line" role="progressbar" aria-valuenow={Math.round(100 * (progress ?? 0))}>
-          <div className="h-full bg-accent transition-[width]" style={{ width: `${100 * (progress ?? 0)}%` }} />
-        </div>
-      )}
+      <p className="text-xs text-muted">The picture is the view on screen. Animations (GIF, video) are in the Animate tab.</p>
     </section>
   );
 }
 
-/** Numeric genre dials that can be swept, with their ranges, read from the genre's schema. */
-function useSweepables(design: Design): Array<{ path: string; title: string; min: number; max: number }> {
-  return useMemo(() => {
-    const genre = genres[design.genre];
-    const out: Array<{ path: string; title: string; min: number; max: number }> = [];
-    const walk = (schema: unknown, prefix: string) => {
-      const s = schema as { properties?: Record<string, { type?: string; minimum?: number; maximum?: number; title?: string; sweep?: boolean; properties?: object }> };
-      for (const [k, v] of Object.entries(s.properties ?? {})) {
-        if ((v.type === 'number' || v.type === 'integer') && v.minimum !== undefined && v.maximum !== undefined) out[v.sweep ? 'unshift' : 'push']({ path: prefix + k, title: v.title ?? k, min: v.minimum, max: v.maximum });
-        else if (v.type === 'object' && v.properties) walk(v, `${prefix}${k}.`);
-      }
-    };
-    walk(toJson(genre.params), '');
-    // Sweep from the current value toward the far end of the dial's range.
-    const params = genre.params.parse(design.params);
-    return out.map((o) => {
-      const now = Number(getPath(params, o.path) ?? o.min);
-      const to = Math.abs(o.max - now) >= Math.abs(now - o.min) ? o.max : o.min;
-      return { ...o, min: now, max: to };
-    });
-  }, [design.genre, design.params]);
-}
-
-/** The design with its genre's defaults written out, so an animation can address any dial. */
-function withDefaults(design: Design, animation: Design['animation']): Design {
-  return { ...design, params: genres[design.genre].params.parse(design.params) as Record<string, unknown>, animation };
-}
-
-const toJson = (schema: z.ZodType) => z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' });
+/** Picture heights offered. */
+const STILL_HEIGHTS = [720, 1080, 2160] as const;

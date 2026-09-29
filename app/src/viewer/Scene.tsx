@@ -4,6 +4,7 @@
  * polygons, exact at any zoom. The model is millimetres with z up; this component turns it once
  * into three.js's y-up world.
  */
+import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -22,6 +23,30 @@ export const REGION_STYLE = {
   slice: { color: '#1f6fd4', opacity: 0.45 },
   section: { color: '#e0b43a', opacity: 0.95 },
 } as const;
+
+/** Where a wall is (model coordinates) and which way it faces (toward the object). */
+interface WallCull {
+  origin: THREE.Vector3;
+  normal: THREE.Vector3;
+}
+
+/**
+ * Hide every wall the camera stands behind, so a wall never blocks the view of the object (a
+ * modelling tool's cut-away). Runs for the screen camera each frame and for an export's camera
+ * right before it renders, so a captured frame shows what the screen shows.
+ */
+export function cullWalls(root: THREE.Object3D, camera: THREE.Camera) {
+  const eye = new THREE.Vector3();
+  camera.getWorldPosition(eye);
+  root.traverse((o) => {
+    const cull = o.userData.cull as WallCull | undefined;
+    if (!cull || !o.parent) return;
+    const point = o.parent.localToWorld(cull.origin.clone());
+    const normal = cull.normal.clone().transformDirection(o.parent.matrixWorld);
+    o.visible = normal.dot(eye.sub(point)) > 0;
+    camera.getWorldPosition(eye);
+  });
+}
 
 /** Share of the fill light given to the ambient term (the rest is the sky/ground hemisphere). */
 const AMBIENT_SHARE_OF_FILL = 0.5;
@@ -155,6 +180,23 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
   const light = lightDirection(view);
   const regions = model.diagnostics.regions;
   const wallRegions = view.walls ? regions.filter((x) => x.role === 'target' || x.role === 'achieved' || x.role === 'missing') : [];
+  // One group per wall (a view's slot), which hides itself when the camera is behind it.
+  const wallSlots = useMemo(() => {
+    const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+    const bySlot = new Map<string, PlanarRegion[]>();
+    for (const reg of wallRegions) {
+      const id = reg.id.split(':')[0];
+      bySlot.set(id, [...(bySlot.get(id) ?? []), reg]);
+    }
+    return [...bySlot].map(([id, regs]) => {
+      const r0 = regs[0];
+      const origin = new THREE.Vector3(...r0.origin);
+      const normal = new THREE.Vector3().crossVectors(new THREE.Vector3(...r0.u), new THREE.Vector3(...r0.v)).normalize();
+      if (normal.dot(centre.clone().sub(origin)) < 0) normal.negate();
+      return { id, regions: regs, cull: { origin, normal } satisfies WallCull };
+    });
+  }, [wallRegions, b]);
+  useFrame(({ scene, camera }) => cullWalls(scene, camera));
   const section = view.section ? regions.find((x) => x.role === 'section') : undefined;
   // Keep the back half (model y >= cut), so the cut face looks at the default camera.
   const clip = useMemo(() => (section ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), -section.origin[1])] : []), [section]);
@@ -187,9 +229,13 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
             </group>
           ))}
         </group>
-        {view.walls && <Walls regions={wallRegions} />}
-        {wallRegions.map((reg) => (
-          <RegionMesh key={reg.id} region={reg} lift={reg.role === 'target' ? 0.02 : reg.role === 'missing' ? 0.015 : 0.01} />
+        {wallSlots.map((slot) => (
+          <group key={slot.id} userData={{ cull: slot.cull }}>
+            <Walls regions={slot.regions} />
+            {slot.regions.map((reg) => (
+              <RegionMesh key={reg.id} region={reg} lift={reg.role === 'target' ? 0.02 : reg.role === 'missing' ? 0.015 : 0.01} />
+            ))}
+          </group>
         ))}
         {showSlices && regions.filter((x) => x.role === 'slice').map((reg) => <RegionMesh key={reg.id} region={reg} />)}
         {section && <RegionMesh region={section} />}

@@ -10,7 +10,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { Design, Model, View } from 'shaping';
 import { cameraFor, clampPose, framingBox, modelRadius, POSE_BOUNDS, poseFromCamera, samePose, type CameraSpec } from './camera';
-import { Scene } from './Scene';
+import { cullWalls, Scene } from './Scene';
 
 export interface CaptureRequest {
   design: Design;
@@ -176,6 +176,8 @@ function Capture() {
       applyCamera(cam, spec, width / height);
       const prevBg = scene.background;
       if (transparent) scene.background = null;
+      scene.updateMatrixWorld();
+      cullWalls(scene, cam);
       gl.setRenderTarget(target);
       gl.render(scene, cam);
       const buf = new Uint8Array(width * height * 4);

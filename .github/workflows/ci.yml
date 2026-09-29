@@ -19,9 +19,28 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      # The app uses previz, a private library not on npm. With a read token it is cloned and
+      # unpacked into vendor/ (never committed); without one, only the library is checked here and
+      # the app is gated by the local CI run (see the manual-task issue about PREVIZ_READ_TOKEN).
+      - name: Get previz (private)
+        id: previz
+        env:
+          PREVIZ_READ_TOKEN: ${{ secrets.PREVIZ_READ_TOKEN }}
+        run: |
+          if [ -z "$PREVIZ_READ_TOKEN" ]; then
+            echo "::notice::PREVIZ_READ_TOKEN is not set: checking the library only; the app is gated by local CI."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git clone --depth 1 "https://x-access-token:${PREVIZ_READ_TOKEN}@github.com/thorwhalen/previz.git" ../previz
+          (cd ../previz && npx --yes pnpm@11 install && npx --yes pnpm@11 build)
+          node scripts/vendor-previz.mjs
+          echo "available=true" >> "$GITHUB_OUTPUT"
+      - run: pnpm --filter shaping typecheck
+      - run: pnpm --filter shaping test
+      - run: pnpm build:lib
+      - if: steps.previz.outputs.available == 'true'
+        run: pnpm --filter shaping-app typecheck && pnpm --filter shaping-app test && pnpm --filter shaping-app build
       # The v1 acceptance test: one command writes a 3MF that re-reads as a closed mesh.
       - run: pnpm shaping build examples/triplet.json --format 3mf --out "$RUNNER_TEMP/triplet.3mf"
       - run: pnpm shaping check examples/triplet.json

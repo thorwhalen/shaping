@@ -15,6 +15,7 @@ import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
 import { cameFromApp, DEFAULT_PANEL, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
+import { AnimatePanel } from './anim/AnimatePanel';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
 import { ShareMenu } from './persist/ShareMenu';
@@ -30,6 +31,7 @@ const PANELS = [
   { id: 'source', label: 'Source' },
   { id: 'shape', label: 'Shape' },
   { id: 'look', label: 'Look' },
+  { id: 'animate', label: 'Animate' },
   { id: 'output', label: 'Export' },
 ] as const;
 
@@ -153,7 +155,8 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
           {panel === 'source' && <SourcePanel profileId={profileId} />}
           {panel === 'shape' && <GenrePanel />}
           {panel === 'look' && <LookPanel onResetView={resetView} showSlices={showSlices} setShowSlices={setShowSlices} />}
-          {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} setOverride={setOverride} />}
+          {panel === 'animate' && <AnimatePanel setOverride={setOverride} />}
+          {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} />}
         </div>
       </aside>
       <main className="relative min-h-[50vh] flex-1" {...shiftDrag}>

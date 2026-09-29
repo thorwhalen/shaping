@@ -44,8 +44,8 @@ importers:
         specifier: 3.5.4
         version: 3.5.4(@gltf-transform/core@4.5.0)(@gltf-transform/extensions@4.5.0)(@gltf-transform/functions@4.5.0(@types/node@22.20.4))(esbuild-wasm@0.27.7)
       mediabunny:
-        specifier: ^1.60.0
-        version: 1.60.0
+        specifier: ^1.61.0
+        version: 1.61.0
       perfect-freehand:
         specifier: ^1.2.3
         version: 1.2.3
@@ -1017,8 +1017,8 @@ packages:
       '@gltf-transform/functions': ^4.2.0
       esbuild-wasm: ^0.27.3
 
-  mediabunny@1.60.0:
-    resolution: {integrity: sha512-CRQ/2D+qUF9w2IyjbjTxxSLEG+PeWeD4whb43UpUBpeNomWb/ffn+ngKgqJSPZ+bmO66MX2yBJQITZ6ijfRjug==}
+  mediabunny@1.61.0:
+    resolution: {integrity: sha512-WciPOYwKZwgYkoBKcEK6JzzIf+w5whypPzFdOihOylZ/5Qv19FmNfRnTcaprH+jD136YpEASU30Eb6VNCJiz3A==}
 
   meshline@3.3.1:
     resolution: {integrity: sha512-/TQj+JdZkeSUOl5Mk2J7eLcYTLiQm2IDzmlSvYm7ov15anEcDJ92GHqqazxTSreeNgfnYu24kiEvvv0WlbCdFQ==}
@@ -2064,7 +2064,7 @@ snapshots:
       fflate: 0.8.3
       magic-string: 0.30.21
 
-  mediabunny@1.60.0:
+  mediabunny@1.61.0:
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13

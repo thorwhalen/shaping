@@ -8,10 +8,11 @@ frontend_dir = "app/dist"
 
 # Build step honoured by tw_platform/deploy.py, which injects VITE_PUBLIC_BASE=/shaping/.
 [build]
-install  = ["npx", "--yes", "pnpm@11", "install", "--frozen-lockfile"]
+# previz (private, not on npm) is unpacked into vendor/ first; see scripts/vendor-previz.mjs.
+install  = ["sh", "-c", "node scripts/vendor-previz.mjs && npx --yes pnpm@11 install --frozen-lockfile"]
 build    = ["npx", "--yes", "pnpm@11", "build"]
 env_vars = ["VITE_PUBLIC_BASE"]
 
 [deploy]
 # The server needs only app/dist (and this file); sources, docs and tests never ship.
-exclude = ["docs", "skills", "examples", "packages", "app/src", "app/public", ".github", "node_modules"]
+exclude = ["docs", "skills", "examples", "packages", "app/src", "app/public", ".github", "node_modules", "vendor", "scripts"]

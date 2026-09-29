@@ -9,3 +9,4 @@ coverage/
 *.local
 # build and test output never lives in the repo
 out/
+vendor/
