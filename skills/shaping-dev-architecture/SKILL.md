@@ -37,7 +37,7 @@ source → prepare → `Figure` → `genre.build(figures, params, { kernel })` �
 
 ## Seams (current defaults)
 
-`kernel` Manifold · `segment` threshold cascade · `trace` marching squares · `store` zodal localStorage · `genres` the built-in table. Surfaces built: web app, command line.
+`kernel` Manifold · `segment` threshold cascade · `trace` marching squares · `store` zodal localStorage · `genres` the built-in table · `loadFont` Fontsource (a `FontProvider`). Surfaces built: web app, command line.
 
 Before adding a sixth, read the global `architecture-first` skill: a seam needs a replacement you can point at, and costs one argument.
 

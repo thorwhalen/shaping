@@ -10,6 +10,7 @@ import { buildFromFigures, manifoldKernel, sourceToFigure, type Kernel } from 's
 import { genres } from '../genres';
 import { exportModel } from 'shaping/export';
 import { decodeImage, makeResolvers, prepareMask } from 'shaping/imaging';
+import { fontProvider } from '../fonts/provider';
 import { getBlob, isBlobRef } from '../lib/blobs';
 import type { Request, Response } from './protocol';
 
@@ -25,7 +26,7 @@ async function loadBytes(src: string): Promise<{ bytes: Uint8Array; mediaType?: 
   if (!res.ok) throw new Error(`Could not load ${src}: ${res.status}`);
   return { bytes: new Uint8Array(await res.arrayBuffer()), mediaType: res.headers.get('content-type') ?? undefined };
 }
-const resolvers = makeResolvers({ loadBytes });
+const resolvers = { ...makeResolvers({ loadBytes }), loadFont: (id: string) => fontProvider().load(id) };
 
 const post = (r: Response, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(r, transfer);
 
