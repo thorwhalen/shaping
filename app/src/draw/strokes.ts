@@ -6,6 +6,7 @@
  * `shapePoints` and `shapePolygon` for lines, rectangles and ellipses. No DOM, no React.
  */
 import { getStroke } from 'perfect-freehand';
+import type { DrawObject } from 'shaping';
 
 /** A point in drawing coordinates (y down): x, y and an optional pen pressure in 0..1. */
 export type Point = number[];
@@ -13,22 +14,7 @@ export type Point = number[];
 /** Tools that create objects. The eraser is a pen with `erase: true`, so it is not listed here. */
 export type ShapeTool = 'pen' | 'line' | 'rect' | 'ellipse';
 
-/** Structural mirror of the library's `DrawObject`; kept local so the canvas has no build-order dependency. */
-export interface DrawObject {
-  tool: ShapeTool;
-  points: Point[];
-  size: number;
-  filled: boolean;
-  erase: boolean;
-}
-
-/** Structural mirror of the library's `DrawingSource`. */
-export interface DrawingSource {
-  kind: 'drawing';
-  width: number;
-  height: number;
-  objects: DrawObject[];
-}
+export type { DrawObject, DrawingSource } from 'shaping';
 
 /** Pressure assumed when the device reports none (mouse, or a pen that reports 0 on contact). */
 export const DEFAULT_PRESSURE = 0.5;

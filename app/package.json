@@ -14,6 +14,9 @@
   "dependencies": {
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.1",
+    "@zodal/core": "^0.2.0",
+    "@zodal/store": "^0.2.0",
+    "@zodal/store-localstorage": "^0.2.0",
     "gifenc": "^1.0.3",
     "immer": "^11.1.18",
     "mediabunny": "^1.60.0",

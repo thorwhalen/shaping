@@ -16,6 +16,15 @@ importers:
       '@react-three/fiber':
         specifier: ^9.8.1
         version: 9.8.1(@types/react@19.3.0)(immer@11.1.18)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(three@0.186.1)
+      '@zodal/core':
+        specifier: ^0.2.0
+        version: 0.2.0(zod@4.6.5)
+      '@zodal/store':
+        specifier: ^0.2.0
+        version: 0.2.0(zod@4.6.5)
+      '@zodal/store-localstorage':
+        specifier: ^0.2.0
+        version: 0.2.0(@zodal/core@0.2.0(zod@4.6.5))(@zodal/store@0.2.0(zod@4.6.5))
       gifenc:
         specifier: ^1.0.3
         version: 1.0.3
@@ -637,6 +646,22 @@ packages:
 
   '@vitest/spy@5.0.2':
     resolution: {integrity: sha512-Ijc7T1nT9efNb5LxvjaBrEqw3f/QwUv5EE0nKqZxgqsaV/FxAAZ8baGylA8X/Z2oS4Lp+K74Jr6dTJsDKxJDeg==}
+
+  '@zodal/core@0.2.0':
+    resolution: {integrity: sha512-FYZ6DNQMz9z4j+6aEjw/hrJKlnlpznBe88Z/qca5cEVkkVh3jaeQPZo22ROgimI5qWWz7UQmXduBtRoNncDUgw==}
+    peerDependencies:
+      zod: ^3.24.0 || ^4.0.0
+
+  '@zodal/store-localstorage@0.2.0':
+    resolution: {integrity: sha512-nR6kUTv8uqf5KxstPxacwUmTXhhpFulZkCQP2jdS+RKfQOWlDodpBsPPC+Wdla0ljo3GAqCABrGipqME4TPHUQ==}
+    peerDependencies:
+      '@zodal/core': ^0.2.0
+      '@zodal/store': ^0.2.0
+
+  '@zodal/store@0.2.0':
+    resolution: {integrity: sha512-CwfvGtRXUjpsdTI48G0H0CnoKKg2w/XE1PO2wENzPk9b/j7joBJygKR0vEZC+qGaw4KSdf7Q4nd5fY0wWYQJig==}
+    peerDependencies:
+      zod: ^3.24.0 || ^4.0.0
 
   anynum@1.0.1:
     resolution: {integrity: sha512-N6//FLET/tXYNM/F6ABca1oH6fWB+KlTt909Le28WMDBk8oaT4vY17DCrwg2MvmuqUKt3Ni4N5dGJ/EoBgcO6A==}
@@ -1729,6 +1754,20 @@ snapshots:
       vite: 8.3.1(@types/node@22.20.4)(jiti@2.7.0)
 
   '@vitest/spy@5.0.2': {}
+
+  '@zodal/core@0.2.0(zod@4.6.5)':
+    dependencies:
+      zod: 4.6.5
+
+  '@zodal/store-localstorage@0.2.0(@zodal/core@0.2.0(zod@4.6.5))(@zodal/store@0.2.0(zod@4.6.5))':
+    dependencies:
+      '@zodal/core': 0.2.0(zod@4.6.5)
+      '@zodal/store': 0.2.0(zod@4.6.5)
+
+  '@zodal/store@0.2.0(zod@4.6.5)':
+    dependencies:
+      '@zodal/core': 0.2.0(zod@4.6.5)
+      zod: 4.6.5
 
   anynum@1.0.1: {}
 
