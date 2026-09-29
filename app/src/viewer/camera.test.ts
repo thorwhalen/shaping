@@ -28,3 +28,12 @@ describe('camera pose', () => {
     [5, 20, 0].forEach((x, i) => expect(spec.target[i]).toBeCloseTo(x, 9));
   });
 });
+
+describe('clampPose', () => {
+  it('keeps a written-back pose inside the schema, so the design always validates', async () => {
+    const { clampPose } = await import('./camera');
+    const p = clampPose({ azimuthDeg: 10, elevationDeg: 89.9999, distance: 500, panX: 99, zoom: 1e6 });
+    expect(ViewSchema.safeParse({ ...ViewSchema.parse({}), ...p }).success).toBe(true);
+    expect(p.elevationDeg).toBe(89);
+  });
+});

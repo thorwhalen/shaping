@@ -3,7 +3,8 @@
  * ("reset view") and for every exported frame, so a turntable is the same on screen and on file.
  * Scene coordinates: three.js y-up; the model (z-up, millimetres) is turned once, in `Scene`.
  */
-import type { Box3, Model, View } from 'shaping';
+import { ViewSchema, type Box3, type Model, type View } from 'shaping';
+import { z } from 'zod';
 
 /** Half the height the orthographic camera shows at zoom 1, in framed radii. */
 export const ORTHO_HALF_HEIGHT_RADII = 1.6;
@@ -70,6 +71,21 @@ export function poseFromCamera(position: Vec3, target: Vec3, zoom: number, box: 
     // Only an orthographic camera zooms; a perspective one dollies (distance), so zoom is not read.
     ...(kind === 'orthographic' ? { zoom } : {}),
   };
+}
+
+/** The schema's bounds for each pose field, read from the schema itself (never restated here). */
+export const POSE_BOUNDS: Record<string, { min: number; max: number }> = (() => {
+  const props = (z.toJSONSchema(ViewSchema, { io: 'input', unrepresentable: 'any' }) as { properties: Record<string, { minimum?: number; maximum?: number }> }).properties;
+  return Object.fromEntries(
+    ['elevationDeg', 'distance', 'panX', 'panY', 'panZ', 'fovDeg', 'zoom', 'azimuthDeg'].map((k) => [k, { min: props[k]?.minimum ?? -Infinity, max: props[k]?.maximum ?? Infinity }]),
+  );
+})();
+
+/** A pose inside the schema's bounds, so what is written back always validates (and reopens). */
+export function clampPose<T extends Partial<CameraPoseFields>>(pose: T): T {
+  const out = { ...pose } as Record<string, number | undefined>;
+  for (const [k, b] of Object.entries(POSE_BOUNDS)) if (typeof out[k] === 'number') out[k] = Math.min(b.max, Math.max(b.min, out[k]!));
+  return out as T;
 }
 
 /** The pose a camera spec stands for, compared field by field with a tolerance (for write-back). */

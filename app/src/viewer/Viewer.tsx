@@ -9,7 +9,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { Design, Model, View } from 'shaping';
-import { cameraFor, framingBox, modelRadius, poseFromCamera, samePose, type CameraSpec } from './camera';
+import { cameraFor, clampPose, framingBox, modelRadius, POSE_BOUNDS, poseFromCamera, samePose, type CameraSpec } from './camera';
 import { Scene } from './Scene';
 
 export interface CaptureRequest {
@@ -91,9 +91,19 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
   const aspect = size.width / Math.max(1, size.height);
   const boxKey = [...box.min, ...box.max].map((x) => x.toFixed(3)).join(',');
   const userMoving = useRef(false);
+  const gestureEnded = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const writeBackRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
+    // A write-back still pending (the user just moved): store it first, so this re-application
+    // (a resize, a rebuild changing the frame) never throws the user's movement away.
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current);
+      timer.current = undefined;
+      writeBackRef.current();
+      return;
+    }
     const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
     const c = controls.current;
     // Skip when the camera is already there (e.g. this change is our own write-back).
@@ -109,17 +119,23 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const writeBack = () => {
+    timer.current = undefined;
     const c = controls.current;
     if (!c) return;
     const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
-    const pose = poseFromCamera(cam.position.toArray() as [number, number, number], c.target.toArray() as [number, number, number], cam.zoom, box, v.camera);
-    userMoving.current = false;
+    const pose = clampPose(poseFromCamera(cam.position.toArray() as [number, number, number], c.target.toArray() as [number, number, number], cam.zoom, box, v.camera));
+    // The gesture is over only once the pointer was released and the camera has settled since.
+    if (gestureEnded.current) userMoving.current = false;
     if (!samePose(pose, v)) onPose(pose);
   };
+  writeBackRef.current = writeBack;
 
   // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
-  const maxDistance = (r * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180));
-  const minZoom = (MIN_OBJECT_PX / size.height) * (spec.halfHeight / r);
+  const maxDistance = Math.min(POSE_BOUNDS.distance.max * r, (r * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180)));
+  const minZoom = Math.max(POSE_BOUNDS.zoom.min, (MIN_OBJECT_PX / size.height) * (spec.halfHeight / r));
+  // Polar angle is measured from straight up: elevation e is polar 90° - e.
+  const minPolar = ((90 - POSE_BOUNDS.elevationDeg.max) * Math.PI) / 180;
+  const maxPolar = ((90 - POSE_BOUNDS.elevationDeg.min) * Math.PI) / 180;
   return (
     <OrbitControls
       ref={controls}
@@ -129,7 +145,14 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
       minDistance={r * MIN_DISTANCE_RADII}
       maxDistance={maxDistance}
       minZoom={minZoom}
-      onStart={() => void (userMoving.current = true)}
+      maxZoom={POSE_BOUNDS.zoom.max}
+      minPolarAngle={minPolar}
+      maxPolarAngle={maxPolar}
+      onStart={() => {
+        userMoving.current = true;
+        gestureEnded.current = false;
+      }}
+      onEnd={() => void (gestureEnded.current = true)}
       onChange={() => {
         if (controls.current) cameraView.set(camera, controls.current.target);
         if (!userMoving.current) return;

@@ -62,6 +62,8 @@ export const useApp = create<AppState>()((set, get) => {
   let refreshSeq = 0;
   let appliedSeq = 0;
   let builtKey = '';
+  /** Key of the build in flight, if any: a display-only edit during a build must not start another. */
+  let buildingKey = '';
 
   /**
    * Resolve missing figures, then rebuild. Called after every change of the design. Every call gets
@@ -83,7 +85,9 @@ export const useApp = create<AppState>()((set, get) => {
       set({ stale: false, busy: false });
       return;
     }
+    if (key === buildingKey) return; // the build in flight already makes this model
     const seq = ++refreshSeq;
+    buildingKey = key;
     set({ stale: true });
     clearTimeout(busyTimer);
     busyTimer = setTimeout(() => get().stale && set({ busy: true }), BUSY_AFTER_MS);
@@ -102,16 +106,19 @@ export const useApp = create<AppState>()((set, get) => {
       }),
     );
     const latest = () => seq === refreshSeq;
+    const finished = () => void (buildingKey === key && (buildingKey = ''));
     const done = () => latest() && set({ stale: false, busy: false });
     const figs = get().figures;
     const missing = genre.slots.filter((s) => !figs[s.id]?.figure || figs[s.id].key !== figureKey(d, s.id));
     if (missing.length) {
       // A newer figure replaced this one: the newer refresh will build. Report errors only when latest.
+      finished();
       if (latest()) set({ stale: false, busy: false, error: missing.map((s) => figs[s.id]?.error).filter(Boolean).join(' ') || null });
       return;
     }
     try {
       const model = await geometry().build(d, Object.fromEntries(genre.slots.map((s) => [s.id, figs[s.id].figure!])));
+      finished();
       // Only a result for the open design, and newer than the one on screen, is applied.
       if (!model || seq < appliedSeq || get().design?.id !== d.id) return;
       appliedSeq = seq;
@@ -119,6 +126,7 @@ export const useApp = create<AppState>()((set, get) => {
       set({ model, error: null });
       done();
     } catch (e) {
+      finished();
       if (latest()) set({ stale: false, busy: false, error: (e as Error).message });
     }
   }
@@ -145,6 +153,7 @@ export const useApp = create<AppState>()((set, get) => {
       flushSave();
       const slot = design ? (genres[design.genre]?.slots[0]?.id ?? '') : '';
       builtKey = '';
+      buildingKey = '';
       // Anything still running for the previous design is now older than what is on screen.
       appliedSeq = ++refreshSeq;
       clearTimeout(busyTimer);
