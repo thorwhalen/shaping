@@ -9,7 +9,7 @@
 import type { Design } from './design.js';
 import { prepareParams } from './design.js';
 import { cleanFigure } from './figure.js';
-import { applyAffine, invertRigid } from './geometry/affine.js';
+import { affineFromColumns, applyAffine, invertRigid } from './geometry/affine.js';
 import type { Genre, GenreResult } from './genre.js';
 import type { Kernel, Region, Solid } from './kernel/types.js';
 import { sourceToFigure, type SourceResolvers } from './sources/index.js';
@@ -174,6 +174,23 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
       });
     }
 
+    // Section: the kernel's cut of the whole object by the plane y = c (front to back), when the view asks.
+    if (design.view.section) {
+      const c = ((gb.min[1] + gb.max[1]) / 2) + design.view.sectionOffset * ((gb.max[1] - gb.min[1]) / 2);
+      const toPlane = SECTION_Y(c);
+      const cut = kernel.slice(kernel.transform(all, toPlane), 0);
+      const inv = invertRigid(toPlane);
+      regions.push({
+        id: 'section',
+        label: 'section',
+        polygons: scalePolys(kernel.polygons(cut)),
+        origin: place(applyAffine(inv, [0, 0, 0])),
+        u: sub(applyAffine(inv, [1, 0, 0]), applyAffine(inv, [0, 0, 0])),
+        v: sub(applyAffine(inv, [0, 1, 0]), applyAffine(inv, [0, 0, 0])),
+        role: 'section',
+      });
+    }
+
     if (pieces > 1) warnings.push(`${pieces} separate pieces. A printed object would fall apart; see the genre's fixes.`);
     const bb = kernel.bbox(allMm);
     return {
@@ -184,5 +201,8 @@ export function buildFromFigures(design: Design, figures: Record<string, Figure>
   model.diagnostics.buildMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
   return model;
 }
+
+/** Model -> plane coordinates for the plane y = c, seen from the front: (x, z, -(y - c)). */
+const SECTION_Y = (c: number) => affineFromColumns([1, 0, 0], [0, 0, -1], [0, 1, 0], [0, 0, c]);
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
