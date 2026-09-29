@@ -21,7 +21,7 @@ Evidence: `docs/research_report.md`, Part B, part 4, and Part C, section 2.4. Al
 
 - **Wall shadows**: three layers from the checker's polygons — target (outline), achieved (fill), missing (marked). Exact at any zoom. Real directional light is a toggle, used when the object or a light leaves the axes.
 - **Section cap**: the kernel's slice, drawn as a flat mesh on the clipping plane. "Show the original slice" places the plane where the transform's `originalSlice` says.
-- A silhouette reads exactly only in an orthographic view. "Snap to view" ends in one.
+- A silhouette reads exactly only in an orthographic view. "Align to view" ends in one.
 
 ## Materials
 
@@ -32,6 +32,8 @@ Presets first: matte plastic, glossy plastic, brushed metal, polished metal, gla
 A rebuild over about 100 ms puts the viewer in a busy state and dims the old solid. The old solid is never left looking current.
 
 ## Animation and capture
+
+Animation goes through the previz library (docs/architecture.md section 11): the adapter is `app/src/anim/engine.ts`, the state and its field kinds are in `app/src/anim/state.ts`, formulas in `app/src/anim/formulas.ts`. Do not add encoders or a frame loop to the app; add a formula, a field kind or an engine member instead. The rules below are what the adapter guarantees.
 
 An animation is a function from a frame index to a `Design`. Frame N equals frame 0, so write N frames.
 

@@ -27,6 +27,8 @@ export interface AppState {
   design: Design | null;
   figures: Record<string, FigureEntry>;
   model: Model | null;
+  /** Build key of the design the model was built for (its geometry). */
+  modelKey: string;
   /** The model on screen is older than the design (a rebuild is running). */
   stale: boolean;
   /** A rebuild has been running for longer than BUSY_AFTER_MS. */
@@ -123,7 +125,7 @@ export const useApp = create<AppState>()((set, get) => {
       if (!model || seq < appliedSeq || get().design?.id !== d.id) return;
       appliedSeq = seq;
       builtKey = key;
-      set({ model, error: null });
+      set({ model, modelKey: key, error: null });
       done();
     } catch (e) {
       finished();
@@ -144,6 +146,7 @@ export const useApp = create<AppState>()((set, get) => {
     design: null,
     figures: {},
     model: null,
+    modelKey: '',
     stale: false,
     busy: false,
     error: null,
@@ -157,7 +160,7 @@ export const useApp = create<AppState>()((set, get) => {
       // Anything still running for the previous design is now older than what is on screen.
       appliedSeq = ++refreshSeq;
       clearTimeout(busyTimer);
-      set({ design, model: null, figures: {}, masks: {}, error: null, stale: false, busy: false, activeSlot: slot });
+      set({ design, model: null, modelKey: '', figures: {}, masks: {}, error: null, stale: false, busy: false, activeSlot: slot });
       if (design) changed();
     },
     update(fn) {

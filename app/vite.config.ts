@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 // The app compiles the library from source, so a change in packages/shaping shows up without a separate build.
+const vendor = (p: string) => fileURLToPath(new URL(`../vendor/previz/dist/${p}`, import.meta.url));
 const lib = (p: string) => fileURLToPath(new URL(`../packages/shaping/src/${p}`, import.meta.url));
 
 /** Stamps the service worker with this build's id, so each build installs a new worker and drops the old caches. */
@@ -26,9 +27,14 @@ export default defineConfig({
   base: process.env.VITE_PUBLIC_BASE ?? '/',
   plugins: [react(), tailwindcss(), stampServiceWorker()],
   resolve: {
+    // previz's own imports of its peers resolve to the app's copies.
+    dedupe: ['zod', 'gifenc', 'mediabunny'],
     alias: [
       { find: /^shaping$/, replacement: lib('index.ts') },
       { find: /^shaping\/(export|imaging|animate|fonts)$/, replacement: lib('$1/index.ts') },
+      // previz is private and not on npm: it is unpacked into vendor/ (scripts/vendor-previz.mjs).
+      { find: /^previz$/, replacement: vendor('index.js') },
+      { find: /^previz\/(render|gif|video|play|formulas|commands)$/, replacement: vendor('$1/index.js') },
     ],
   },
   worker: { format: 'es' },

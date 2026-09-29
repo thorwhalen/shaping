@@ -10,7 +10,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { Design, Model, View } from 'shaping';
 import { cameraFor, clampPose, framingBox, modelRadius, POSE_BOUNDS, poseFromCamera, samePose, type CameraSpec } from './camera';
-import { Scene } from './Scene';
+import { cullWalls, Scene } from './Scene';
 
 export interface CaptureRequest {
   design: Design;
@@ -51,6 +51,9 @@ export const cameraView = (() => {
     },
   };
 })();
+
+/** Store a camera movement that is still settling, now (e.g. right before capturing the view). */
+export const flushPose: { current: () => void } = { current: () => undefined };
 
 /** Pause after the last orbit movement (damping included) before the pose is written back. */
 const POSE_WRITEBACK_MS = 250;
@@ -129,6 +132,11 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
     if (!samePose(pose, v)) onPose(pose);
   };
   writeBackRef.current = writeBack;
+  flushPose.current = () => {
+    if (timer.current === undefined) return;
+    clearTimeout(timer.current);
+    writeBack();
+  };
 
   // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
   const maxDistance = Math.min(POSE_BOUNDS.distance.max * r, (r * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180)));
@@ -176,6 +184,8 @@ function Capture() {
       applyCamera(cam, spec, width / height);
       const prevBg = scene.background;
       if (transparent) scene.background = null;
+      scene.updateMatrixWorld();
+      cullWalls(scene, cam);
       gl.setRenderTarget(target);
       gl.render(scene, cam);
       const buf = new Uint8Array(width * height * 4);
@@ -211,6 +221,8 @@ export interface ViewerProps {
 
 export function Viewer({ design, model, busy, resetKey, showSlices, override, setOverride, onPose, children }: ViewerProps) {
   frameOverride.set = setOverride;
+  // Development only: let the browser checks see whether a preview is on screen.
+  if (import.meta.env.DEV) (window as unknown as { __override?: unknown }).__override = override;
   const shown = override ?? (model ? { design, model } : null);
   return (
     <div className="relative h-full w-full">

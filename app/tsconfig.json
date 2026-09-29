@@ -27,6 +27,12 @@
       ],
       "shaping/*": [
         "../packages/shaping/src/*/index.ts"
+      ],
+      "previz": [
+        "../vendor/previz/dist/index.d.ts"
+      ],
+      "previz/*": [
+        "../vendor/previz/dist/*/index.d.ts"
       ]
     }
   },

@@ -9,7 +9,7 @@ Bring a figure (an image, an SVG, a drawing, a shape or block text), pick a *gen
 - **Turned components** — split a figure into its parts and give each part its own revolve, extrusion (with twist and taper) or radial array, and its own colour. The figure stays a slice of the object.
 - **Shadow blocks** — one solid whose three shadows are three figures, like the trip-let on the cover of *Gödel, Escher, Bach*. The app shows the three shadows on the walls and marks any part the solid cannot cast.
 
-Exports: 3MF and STL for printing; GLB, PLY and OBJ for viewing; SVG and DXF profiles for laser cutting and engraving; PNG, GIF and video of turntables and parameter sweeps.
+Exports: 3MF and STL for printing; GLB, PLY and OBJ for viewing; SVG and DXF profiles for laser cutting and engraving; PNG pictures of the view. Animate: capture views as keyframes (camera, light, material, dials) or pick a formula (turntable, a full day of light, run a dial), play it in the viewer, and export it as GIF or video.
 
 ## Library
 
@@ -36,6 +36,10 @@ npx shaping check examples/triplet.json
 ## Adding a genre
 
 A genre is one object: an id, the figures it takes (`slots`), a Zod schema of its dials, and a `build` function. See `packages/shaping/src/genres/` and `docs/architecture.md`.
+
+## Developing the app
+
+The app animates through `previz`, a private library that is not on npm yet. Before `pnpm install`, run `node scripts/vendor-previz.mjs`: it unpacks the previz tarball into `vendor/` (gitignored) from `$PREVIZ_TARBALL`, the previz build output, or a sibling clone of previz. The library (`packages/shaping`) does not depend on it.
 
 ## Related
 

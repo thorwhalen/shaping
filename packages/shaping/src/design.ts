@@ -244,6 +244,12 @@ export const DesignObjectSchema = z.object({
   style: StyleSchema.default(StyleSchema.parse({})),
   view: ViewSchema.default(ViewSchema.parse({})),
   animation: AnimationSchema.optional(),
+  /**
+   * A keyframe sequence: captured views with transitions and dwells, as a sequence document of the
+   * animation library the app uses. Display state only (never part of the build); validated by that
+   * library when it is compiled.
+   */
+  sequence: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type Source = z.infer<typeof SourceSchema>;
