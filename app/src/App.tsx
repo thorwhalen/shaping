@@ -17,6 +17,7 @@ import { cameFromApp, DEFAULT_PANEL, pushRoute, readRoute, replaceRoute, type Ro
 import { useApp } from './state/store';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
+import { ShareMenu } from './persist/ShareMenu';
 
 /** An angle in (-180, 180]. */
 const wrapDegrees = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
@@ -74,6 +75,7 @@ export function App() {
     route.design ? <Loading /> : <Gallery onOpen={openDesign} />
   ) : (
     <Editor
+      onOpenDesign={openDesign}
       panel={route.panel}
       setPanel={(panel) => {
         const r = { ...route, panel };
@@ -100,7 +102,7 @@ function Loading() {
   return <div className="grid h-full place-items-center text-muted">Opening…</div>;
 }
 
-function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: string) => void; onBack: () => void }) {
+function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setPanel: (p: string) => void; onBack: () => void; onOpenDesign: (d: Design) => void }) {
   const design = useApp((s) => s.design)!;
   const model = useApp((s) => s.model);
   const busy = useApp((s) => s.busy);
@@ -128,6 +130,7 @@ function Editor({ panel, setPanel, onBack }: { panel: string; setPanel: (p: stri
             ←
           </button>
           <input aria-label="Title" className="min-w-0 flex-1 rounded bg-transparent px-1 font-medium hover:bg-white focus:bg-white" value={design.title} onChange={(e) => edit((d) => void (d.title = e.target.value))} />
+          <ShareMenu design={design} onOpenDesign={onOpenDesign} />
         </div>
         <nav className="flex border-b border-line" role="tablist">
           {PANELS.map((p) => (
