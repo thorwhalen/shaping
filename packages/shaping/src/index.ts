@@ -13,6 +13,7 @@
 import { buildFromFigures, resolveFigures, type GenreTable } from './build.js';
 import { parseDesign, type Design } from './design.js';
 import { builtInGenres } from './genres/index.js';
+import { defaultFontLoader } from './fonts/catalog.js';
 import { defaultResolvers } from './imaging/index.js';
 import { manifoldKernel } from './kernel/manifold.js';
 import type { Kernel } from './kernel/types.js';
@@ -27,7 +28,7 @@ export interface BuildOptions {
   kernel?: Kernel;
   /** The table of genres. Default: the built-in genres. */
   genres?: GenreTable;
-  /** How image, SVG and drawing sources become figures. Default: the imaging module. */
+  /** How image, SVG, drawing and outline-font text sources become figures. Default: the imaging module, and Fontsource for fonts. */
   resolvers?: SourceResolvers;
   /** Figures already resolved, by slot id (skips resolving those slots). */
   figures?: Record<string, Figure>;
@@ -44,5 +45,5 @@ export async function build(design: unknown, opts: BuildOptions = {}): Promise<M
 
 async function resolveMissing(d: Design, kernel: Kernel, genres: GenreTable, opts: BuildOptions) {
   if (opts.figures && Object.keys(opts.figures).length >= Object.keys(d.sources).length) return {};
-  return resolveFigures(d, { kernel, genres, resolvers: opts.resolvers ?? defaultResolvers });
+  return resolveFigures(d, { kernel, genres, resolvers: { loadFont: defaultFontLoader, ...(opts.resolvers ?? defaultResolvers) } });
 }

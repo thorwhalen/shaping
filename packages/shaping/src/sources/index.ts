@@ -7,9 +7,11 @@
  */
 import type { DrawingSource, ImageSource, PrepareParams, ShapeSource, Source, SvgSource, TextSource } from '../design.js';
 import type { Kernel } from '../kernel/types.js';
+import type { FontLoader } from '../fonts/types.js';
+import { isBlockOnly, outlineTextFigure } from '../fonts/text.js';
 import type { Figure, Polygon, Ring, Vec2 } from '../types.js';
 import { roundRegion } from '../figure.js';
-import { GLYPH_HEIGHT, GLYPH_WIDTH, glyphCells } from './blockfont.js';
+import { blockGlyphPolygons, GLYPH_WIDTH } from './blockfont.js';
 
 /** What a resolver may use. `kernel` handles are valid only inside `kernel.scope`. */
 export interface ResolverContext {
@@ -23,6 +25,8 @@ export interface SourceResolvers {
   svg?: (source: SvgSource, prepare: PrepareParams, ctx: ResolverContext) => Promise<Figure> | Figure;
   /** Turn a drawing's objects into polygons (black objects unioned, erasers subtracted, in order). */
   drawing?: (source: DrawingSource, prepare: PrepareParams, ctx: ResolverContext) => Promise<Figure> | Figure;
+  /** The bytes of a catalogue font (see `shaping/fonts`): needed by text in any font but the block font. */
+  loadFont?: FontLoader;
 }
 
 const TAU = Math.PI * 2;
@@ -88,19 +92,7 @@ export function textFigure(s: Pick<TextSource, 'text' | 'spacing'>, kernel?: Ker
   const pitch = GLYPH_WIDTH + s.spacing;
   [...s.text].forEach((ch, i) => {
     if (ch === ' ') return;
-    // Cells overlap by a hair so that the union welds them into one outline.
-    const e = 1e-3;
-    const cells = glyphCells(ch);
-    let polygons: Polygon[] = cells.map(([c, r]) => ({
-      outer: [
-        [i * pitch + c - e, r - e],
-        [i * pitch + c + 1 + e, r - e],
-        [i * pitch + c + 1 + e, r + 1 + e],
-        [i * pitch + c - e, r + 1 + e],
-      ],
-      holes: [],
-    }));
-    polygons.push(...diagonalBridges(cells, i * pitch));
+    let polygons = blockGlyphPolygons(ch, i * pitch);
     if (kernel && round > 0) {
       // A stroke is one cell wide, so round = 1 means a radius of half a cell: a fully round tip.
       const radius = round * BLOCK_STROKE_HALF_WIDTH * ROUND_SAFETY;
@@ -112,24 +104,8 @@ export function textFigure(s: Pick<TextSource, 'text' | 'spacing'>, kernel?: Ker
   return { units: 'unit', parts };
 }
 
-/**
- * Cells that touch only at a corner meet in a single point, which is no solid at all. Where that
- * happens, a diamond centred on the corner fills the two empty half-cells, drawing a 45° stroke.
- */
-function diagonalBridges(cells: Array<[number, number]>, x0: number): Polygon[] {
-  const on = new Set(cells.map(([c, r]) => `${c},${r}`));
-  const has = (c: number, r: number) => on.has(`${c},${r}`);
-  const out: Polygon[] = [];
-  for (let c = -1; c < GLYPH_WIDTH; c++)
-    for (let r = -1; r < GLYPH_HEIGHT; r++) {
-      const a = has(c, r), b = has(c + 1, r + 1), d = has(c + 1, r), e = has(c, r + 1);
-      if ((a && b && !d && !e) || (d && e && !a && !b)) {
-        const x = x0 + c + 1, y = r + 1;
-        out.push({ outer: [[x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y]], holes: [] });
-      }
-    }
-  return out;
-}
+/** The text of a block-only source: its runs joined, or its text. */
+const blockText = (s: TextSource): string => (s.runs?.length ? s.runs.map((r) => r.text).join('') : s.text);
 
 export interface ResolveContext {
   kernel: Kernel;
@@ -147,7 +123,8 @@ export async function sourceToFigure(source: Source, prepare: PrepareParams, ctx
     case 'shape':
       return shapeFigure(source);
     case 'text':
-      return textFigure(source, ctx.kernel, source.round);
+      if (isBlockOnly(source)) return textFigure({ spacing: source.spacing, text: blockText(source) }, ctx.kernel, source.round);
+      return outlineTextFigure(source, { kernel: ctx.kernel, loadFont: need('loadFont') });
     case 'polygons':
       return { units: source.figure.units, parts: source.figure.parts.map((p) => ({ ...p, polygons: p.polygons.map((g) => ({ outer: g.outer, holes: g.holes ?? [] })) })) };
     case 'image':

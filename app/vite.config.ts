@@ -13,7 +13,7 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^shaping$/, replacement: lib('index.ts') },
-      { find: /^shaping\/(export|imaging|animate)$/, replacement: lib('$1/index.ts') },
+      { find: /^shaping\/(export|imaging|animate|fonts)$/, replacement: lib('$1/index.ts') },
     ],
   },
   worker: { format: 'es' },
