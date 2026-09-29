@@ -26,8 +26,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "fast-png": "^8.0.0",
     "fflate": "^0.8.3",
+    "jpeg-js": "^0.4.4",
     "manifold-3d": "3.5.4",
+    "perfect-freehand": "^1.2.3",
     "zod": "^4.6.5"
   },
   "devDependencies": {
