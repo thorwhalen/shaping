@@ -1,6 +1,6 @@
 /**
  * Ambient types for the two untyped packages the font module loads lazily: `opentype.js` (parser)
- * and `wawoff2` (WOFF2 decoder). Only the parts the module uses are declared, and none of these
+ * and nothing else. Only the parts the module uses are declared, and none of these
  * types appears in the public API of `shaping/fonts`.
  */
 declare module 'opentype.js' {
@@ -38,7 +38,3 @@ declare module 'opentype.js' {
   export function parse(buffer: ArrayBuffer): Font;
 }
 
-declare module 'wawoff2/decompress.js' {
-  const decompress: (bytes: Uint8Array) => Promise<Uint8Array>;
-  export default decompress;
-}

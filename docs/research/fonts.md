@@ -34,7 +34,7 @@ The question: let a text source be set in any open font, with the font's variabl
 | [fontkit 2.0.4](https://github.com/foliojs/fontkit) | MIT | Yes (`getVariation`) | `GPOS` | Yes, built in | 5.6 MB unpacked; several dependencies (`restructure`, `brotli`, `dfa`, ...) | More complete layout, heavier, Node-first packaging. |
 | [harfbuzzjs 1.6.2](https://github.com/harfbuzz/harfbuzzjs) | MIT | Yes, and the most faithful: HarfBuzz applies `GSUB` and `GPOS`, variations, and draws glyphs with `hb-draw` | Full | No | 1.3 MB unpacked, WebAssembly | The right engine if ligatures and complex scripts matter. Not tried here beyond reading its documentation. |
 
-WOFF2 decoder: [wawoff2 2.0.1](https://github.com/fontello/wawoff2), MIT, Google's woff2 decoder and Brotli compiled to WebAssembly, the wasm embedded in the script (305 KB). Nothing GPL, LGPL or AGPL is bundled.
+WOFF2 decoder: [woff2-encoder 2.0.0](https://www.npmjs.com/package/woff2-encoder), MIT, Google's woff2 decoder compiled to WebAssembly, published as an ES module that runs in browsers, workers and Node. It replaced wawoff2, whose build assigns `module.exports` only under Node, so in a browser it exports an empty object and its ready-promise never resolves (found in the browser check, 2026-09-29). Nothing GPL, LGPL or AGPL is bundled.
 
 ## Choice
 
@@ -64,5 +64,5 @@ WOFF2 decoder: [wawoff2 2.0.1](https://github.com/fontello/wawoff2), MIT, Google
 [6] opentype.js. https://github.com/opentypejs/opentype.js
 [7] fontkit. https://github.com/foliojs/fontkit
 [8] harfbuzzjs. https://github.com/harfbuzz/harfbuzzjs
-[9] wawoff2. https://github.com/fontello/wawoff2
+[9] woff2-encoder. https://www.npmjs.com/package/woff2-encoder (and, for the record of what failed, wawoff2: https://github.com/fontello/wawoff2)
 [10] SIL Open Font License 1.1. https://openfontlicense.org

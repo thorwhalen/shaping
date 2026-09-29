@@ -35,7 +35,7 @@ export function Slider({ value, min, max, step, onChange, restGhost, disabled, l
     setDragStart(null);
   };
   return (
-    <div className="relative flex w-full items-center">
+    <div className="relative isolate flex w-full items-center">
       {showGhost && (
         <button
           type="button"

@@ -76,7 +76,7 @@
     "manifold-3d": "3.5.4",
     "opentype.js": "2.0.0",
     "perfect-freehand": "^1.2.3",
-    "wawoff2": "2.0.1",
+    "woff2-encoder": "2.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
