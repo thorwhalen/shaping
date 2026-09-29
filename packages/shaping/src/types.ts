@@ -54,6 +54,8 @@ export interface Body {
   /** Triangle vertex indices, three per triangle. */
   indices: Uint32Array;
   color: string;
+  /** A colour the genre insisted on for this body, if any (the style decides otherwise). */
+  genreColor?: string;
 }
 
 /** Axis-aligned bounding box. */

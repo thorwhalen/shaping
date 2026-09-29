@@ -180,3 +180,9 @@ Recommendation: **A now, B when a genre has a reason to be released on its own**
 5. What `an` may want from here: turntable and parameter-sweep renders of 3D objects as assets for a scene, and the 2D-to-3D transforms as a way to give depth to flat artwork.
 
 **Consequences.** A change to the track format in either project is a change to check against the other. The format is small on purpose.
+
+## 10. Camera pose and colours are display state (2026-09-29)
+
+**Camera pose in the Design.** `view` holds the whole camera: azimuth, elevation, `distance` (in framed radii), pan (`panX`, `panY`, `panZ`, in framed radii), `fovDeg` and, for the orthographic camera, `zoom`. The defaults reproduce the earlier fixed camera (distance 4, no pan, 35°). Orbiting, panning and zooming with the mouse write the pose back into the Design once the movement settles, so the stored state is always what is on screen. One pure function, `cameraFor(view, box)` in `app/src/viewer/camera.ts`, sets up both the on-screen camera and every exported frame's camera, so an export is the view (checked in the browser: mean pixel difference under 3/255 after orbiting, zooming and panning). The environment and lights follow the frame being shown, not the live design, so a previewed or captured frame is lit as it will be exported.
+
+**Colours without a rebuild.** `style.color`, `style.partColors` and `style.palette` are display fields (`render` in the schema), so changing them never rebuilds geometry. This is safe only because colouring is one pure function, `recolor(model, style)` in the core, applied by the viewer and before every export: the build still colours the model it returns (with the same function, `bodyColor`), and each body keeps the colour its genre insisted on (`genreColor`) so recolouring gives exactly what a rebuild would (a test pins this). The alternative, keeping colour in the build key, would make every colour frame of an animation cost a rebuild.

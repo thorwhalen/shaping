@@ -14,4 +14,7 @@ createRoot(document.getElementById('root')!).render(
 registerServiceWorker();
 
 // Development only: expose the store so the browser checks can drive the app.
-if (import.meta.env.DEV) void import('./state/store').then((m) => Object.assign(window, { __app: m.useApp }));
+if (import.meta.env.DEV) {
+  void import('./state/store').then((m) => Object.assign(window, { __app: m.useApp }));
+  void import('./viewer/Viewer').then((m) => Object.assign(window, { __capture: m.captureRef }));
+}

@@ -4,7 +4,7 @@
  * returns to the gallery, not out of the app.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { DEFAULT_PROFILE, liveChecks, PROFILES, type Design, type Model } from 'shaping';
+import { DEFAULT_PROFILE, liveChecks, PROFILES, type Design, type Model, ViewSchema } from 'shaping';
 import { EXAMPLES, Gallery } from './Gallery';
 import { Notices } from './persist/Notices';
 import { useSharedLink } from './persist/useSharedLink';
@@ -18,6 +18,10 @@ import { useApp } from './state/store';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
 import { ShareMenu } from './persist/ShareMenu';
+
+const VIEW_DEFAULTS = ViewSchema.parse({});
+const POSE_KEYS = ['azimuthDeg', 'elevationDeg', 'distance', 'panX', 'panY', 'panZ', 'fovDeg', 'zoom'] as const;
+const pick = <T extends object, K extends keyof T>(o: T, keys: readonly K[]) => Object.fromEntries(keys.map((k) => [k, o[k]])) as Pick<T, K>;
 
 /** An angle in (-180, 180]. */
 const wrapDegrees = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
@@ -121,6 +125,12 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
     [edit],
   );
   const shiftDrag = useShiftDragLight(design.view, setLight);
+  // Orbiting writes the camera pose into the design, so what is stored and exported is what is seen.
+  const setPose = useCallback((pose: Partial<Design['view']>) => edit((d) => void Object.assign(d.view, pose)), [edit]);
+  const resetView = useCallback(() => {
+    edit((d) => void Object.assign(d.view, pick(VIEW_DEFAULTS, POSE_KEYS)));
+    setResetKey((k) => k + 1);
+  }, [edit]);
 
   return (
     <div className="flex h-full flex-col md:flex-row">
@@ -142,12 +152,12 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {panel === 'source' && <SourcePanel profileId={profileId} />}
           {panel === 'shape' && <GenrePanel />}
-          {panel === 'look' && <LookPanel onResetView={() => setResetKey((k) => k + 1)} showSlices={showSlices} setShowSlices={setShowSlices} />}
+          {panel === 'look' && <LookPanel onResetView={resetView} showSlices={showSlices} setShowSlices={setShowSlices} />}
           {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} setOverride={setOverride} />}
         </div>
       </aside>
       <main className="relative min-h-[50vh] flex-1" {...shiftDrag}>
-        <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride}>
+        <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
           <LightBall view={design.view} onChange={setLight} />

@@ -145,11 +145,11 @@ export const MATERIAL_PRESETS = ['matte', 'glossy', 'brushed-metal', 'polished-m
 
 export const StyleSchema = z.object({
   material: z.enum(MATERIAL_PRESETS).default('glossy').meta({ render: true, title: 'Material' }),
-  color: z.string().default('#d4763b').meta({ title: 'Colour' }),
+  color: z.string().default('#d4763b').meta({ render: true, title: 'Colour' }),
   /** Colour per part id; parts not listed use `color` or the palette. */
-  partColors: z.record(z.string(), z.string()).default({}),
+  partColors: z.record(z.string(), z.string()).default({}).meta({ render: true }),
   /** Use a distinct palette colour per part when no colour is given. */
-  palette: z.boolean().default(true).meta({ title: 'Colour parts' }),
+  palette: z.boolean().default(true).meta({ render: true, title: 'Colour parts' }),
   opacity: z.number().min(0.05).max(1).default(1).meta({ render: true, title: 'Opacity', step: 0.05 }),
   roughness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Roughness', step: 0.05 }),
   metalness: z.number().min(0).max(1).nullable().default(null).meta({ render: true, title: 'Metalness', step: 0.05 }),
@@ -163,6 +163,18 @@ export const ViewSchema = z.object({
   elevationDeg: z.number().min(-89).max(89).default(25).meta({ render: true, title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
   walls: z.boolean().default(true).meta({ render: true, title: 'Shadow walls' }),
+  // ---- the rest of the camera pose (with azimuthDeg and elevationDeg above), in units of the framed
+  // radius, so a pose means the same framing whatever the object's size. Screen and export read it.
+  /** Camera distance from the orbit target, in framed radii (perspective); dolly changes it. */
+  distance: z.number().min(1.05).max(200).default(4).meta({ render: true, title: 'Distance', step: 0.05 }),
+  /** Pan: the orbit target's offset from the object's centre, in framed radii (scene x, y, z). */
+  panX: z.number().min(-20).max(20).default(0).meta({ render: true, title: 'Pan x', step: 0.01 }),
+  panY: z.number().min(-20).max(20).default(0).meta({ render: true, title: 'Pan y', step: 0.01 }),
+  panZ: z.number().min(-20).max(20).default(0).meta({ render: true, title: 'Pan z', step: 0.01 }),
+  /** Vertical field of view of the perspective camera, in degrees. */
+  fovDeg: z.number().min(5).max(120).default(35).meta({ render: true, title: 'Field of view', unit: '°', step: 1 }),
+  /** Zoom of the orthographic camera (1 frames the object). */
+  zoom: z.number().min(0.05).max(50).default(1).meta({ render: true, title: 'Zoom', step: 0.01 }),
   /** Distance of the shadow walls from the object, as a share of its size. */
   wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { walls: [true] } }),
   ground: z.boolean().default(true).meta({ render: true, title: 'Ground shadow' }),
