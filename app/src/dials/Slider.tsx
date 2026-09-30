@@ -2,8 +2,13 @@
  * A range slider with a ghost thumb. The value updates live while dragging. The ghost is a faint
  * second thumb: while dragging it stays where the drag started, so the way back is visible; at rest
  * it marks the default value (when the slider is elsewhere). Clicking the ghost returns there.
+ *
+ * Changes are paced (`lib/pacing`): the thumb and the readout follow the hand at once, while
+ * `onChange` gets the latest value as fast as the work behind it allows, and on a device that cannot
+ * keep up, only when the hand pauses or lets go. The value on release always lands.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { usePaced } from '../lib/pacing';
 
 /** Width of the native range thumb, in pixels, so the ghost lines up with it. */
 const THUMB_PX = 14;
@@ -18,9 +23,13 @@ export interface SliderProps {
   restGhost?: number;
   disabled?: boolean;
   label: string;
+  /** The readout beside the slider, given the value it shows (which leads `value` while dragging). */
+  readout?: (v: number) => ReactNode;
 }
 
-export function Slider({ value, min, max, step, onChange, restGhost, disabled, label }: SliderProps) {
+export function Slider({ value: saved, min, max, step, onChange, restGhost, disabled, label, readout }: SliderProps) {
+  const paced = usePaced(saved, onChange);
+  const value = paced.value;
   const [dragStart, setDragStart] = useState<number | null>(null);
   const startRef = useRef<number | null>(null);
   const ghost = dragStart ?? restGhost;
@@ -33,8 +42,9 @@ export function Slider({ value, min, max, step, onChange, restGhost, disabled, l
   const end = () => {
     startRef.current = null;
     setDragStart(null);
+    paced.commit();
   };
-  return (
+  const slider = (
     <div className="relative isolate flex w-full items-center">
       {showGhost && (
         <button
@@ -42,7 +52,7 @@ export function Slider({ value, min, max, step, onChange, restGhost, disabled, l
           tabIndex={-1}
           aria-label={`${label}: back to ${ghost}`}
           title={dragStart !== null ? `Back to where you started (${ghost})` : `Back to the default (${ghost})`}
-          onClick={() => onChange(ghost!)}
+          onClick={() => paced.commit(ghost!)}
           className="absolute top-1/2 z-30 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-accent/60 bg-accent/25 hover:bg-accent/50"
           style={{ left: `calc(${pct(ghost!)} * (100% - ${THUMB_PX}px) + ${THUMB_PX / 2}px)` }}
         />
@@ -62,8 +72,15 @@ export function Slider({ value, min, max, step, onChange, restGhost, disabled, l
         onKeyDown={() => startRef.current === null && begin()}
         onKeyUp={end}
         onBlur={end}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => paced.push(Number(e.target.value))}
       />
+    </div>
+  );
+  if (!readout) return slider;
+  return (
+    <div className="flex w-full items-center gap-2">
+      {slider}
+      <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">{readout(value)}</span>
     </div>
   );
 }

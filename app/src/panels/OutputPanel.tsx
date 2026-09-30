@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_PROFILE, PROFILES, type Design, type Model, recolor } from 'shaping';
 import { exporters, exportFileName, type Operation } from 'shaping/export';
+import { NumberInput } from '../lib/NumberInput';
 import { pickSaveHandle, saveBytes } from '../media/png';
 import { useApp } from '../state/store';
 import { captureRef } from '../viewer/Viewer';
@@ -48,7 +49,7 @@ export function OutputPanel({ profileId, setProfileId }: { profileId: string; se
         <label className="flex items-center justify-between gap-2 text-sm">
           <span>Longest edge</span>
           <span className="flex items-center gap-1">
-            <input type="number" min={1} max={2000} step={1} value={design.sizeMm} onChange={(e) => Number(e.target.value) > 0 && edit((d) => void (d.sizeMm = Number(e.target.value)))} className="w-20 rounded border border-line bg-white px-1 text-right" />
+            <NumberInput min={1} max={2000} step={1} value={design.sizeMm} onValue={(v) => edit((d) => void (d.sizeMm = v))} className="w-20 rounded border border-line bg-white px-1 text-right" />
             mm
           </span>
         </label>
@@ -86,7 +87,7 @@ export function OutputPanel({ profileId, setProfileId }: { profileId: string; se
             </div>
             <label className="flex items-center justify-between">
               Kerf
-              <span><input type="number" min={0} max={1} step={0.01} value={kerf} onChange={(e) => setKerf(Math.max(0, Number(e.target.value)))} className="w-16 rounded border border-line bg-white px-1 text-right" /> mm</span>
+              <span><NumberInput min={0} max={1} step={0.01} value={kerf} onValue={setKerf} className="w-16 rounded border border-line bg-white px-1 text-right" /> mm</span>
             </label>
             <p className="text-xs text-muted">Profiles are the figures as the object carries them (slices, shadows). “CAD export” means these profiles plus the recipe in the print pack: import, extrude, intersect.</p>
           </div>

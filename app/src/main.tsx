@@ -3,11 +3,15 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { App } from './App';
+import { PacingProvider } from './lib/pacing';
+import { appPacing } from './state/settled';
 import { registerServiceWorker } from './persist';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <PacingProvider value={appPacing}>
+      <App />
+    </PacingProvider>
   </StrictMode>,
 );
 

@@ -6,13 +6,14 @@
  * several fonts in one text, as runs; and the round and spacing dials, which work for every font.
  * It edits a `TextSource` value and reports the next one; it knows nothing of the rest of the app.
  */
-import { useState } from 'react';
 import { BLOCK_FONT, TextSourceSchema, type TextSource } from 'shaping';
 import { resolveRuns, type FontAxis } from 'shaping/fonts';
 import { Dials } from '../dials/Dials';
+import { Slider } from '../dials/Slider';
 import { addRun, axisValue, filterBlockText, fromRuns, MAX_TEXT_LENGTH, patchRun, removeRun, textFor, toRuns, withAxis, withFont, withRunFont } from './editing';
 import { FontPicker } from './FontPicker';
 import { useFontAxes } from './hooks';
+import { useEditBuffer } from '../lib/editBuffer';
 
 /** Axes shown at once; the rest sit under "More axes". */
 const PRIMARY_AXES = ['wght', 'wdth', 'opsz', 'slnt', 'ital'];
@@ -81,20 +82,17 @@ function RunsEditor({ value, onChange }: TextSourceEditorProps) {
   );
 }
 
+/**
+ * The text of a source. A source's text is never empty, but the input may be while the person
+ * retypes it: the draft is theirs, and the text changes whenever the draft means one.
+ */
 function TextInput({ label, font, text, onText }: { label: string; font: string; text: string; onText: (text: string) => void }) {
   const block = font === BLOCK_FONT;
+  const input = useEditBuffer(text, onText, { format: (t) => t, parse: (d) => textFor(font, d) || null, clean: block ? filterBlockText : undefined });
   return (
     <label className="flex flex-col gap-1 text-sm">
       {label}
-      <input
-        className={`rounded border border-line bg-white px-2 py-1 text-lg ${block ? 'font-mono uppercase' : ''}`}
-        value={text}
-        maxLength={MAX_TEXT_LENGTH}
-        onChange={(e) => {
-          const next = textFor(font, block ? filterBlockText(e.target.value) : e.target.value);
-          if (next) onText(next);
-        }}
-      />
+      <input className={`rounded border border-line bg-white px-2 py-1 text-lg ${block ? 'font-mono uppercase' : ''}`} maxLength={MAX_TEXT_LENGTH} {...input} />
     </label>
   );
 }
@@ -135,10 +133,7 @@ function AxisDial({ axis, value, onChange }: { axis: FontAxis; value: number; on
           </button>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        <input type="range" aria-label={title} className="w-full accent-[var(--color-accent)]" min={axis.min} max={axis.max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-        <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted">{Number.isInteger(step) ? Math.round(value) : value.toFixed(2)}</span>
-      </div>
+      <Slider label={title} min={axis.min} max={axis.max} step={step} value={value} restGhost={axis.default} onChange={onChange} readout={(v) => (Number.isInteger(step) ? Math.round(v) : v.toFixed(2))} />
     </div>
   );
 }

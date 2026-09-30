@@ -19,6 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Design, Model } from 'shaping';
 import { Dials } from '../dials/Dials';
 import { genres } from '../genres';
+import { NumberInput } from '../lib/NumberInput';
 import { pickSaveHandle, saveBytes } from '../media/png';
 import { useApp } from '../state/store';
 import { captureRef, flushPose } from '../viewer/Viewer';
@@ -212,7 +213,7 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
                     <>
                       <label className="flex items-center gap-1">
                         move
-                        <input type="number" min={0.1} max={60} step={0.1} className="w-14 rounded border border-line px-1" value={k.enter?.duration ?? sequence.defaults?.transition?.duration ?? 1} onChange={(e) => setSequence(updateKeyframe(sequence, i, { enter: { duration: Math.max(0.1, Number(e.target.value)) } }))} />s
+                        <NumberInput min={0.1} max={60} step={0.1} className="w-14 rounded border border-line px-1" value={k.enter?.duration ?? sequence.defaults?.transition?.duration ?? 1} onValue={(duration) => setSequence(updateKeyframe(sequence, i, { enter: { duration } }))} />s
                       </label>
                       <select aria-label="Timing" className="rounded border border-line px-1" value={(k.enter?.timing as string | undefined) ?? (sequence.defaults?.transition?.timing as string)} onChange={(e) => setSequence(updateKeyframe(sequence, i, { enter: { timing: e.target.value } }))}>
                         {TIMINGS.map((t) => <option key={t}>{t}</option>)}
@@ -221,7 +222,7 @@ export function AnimatePanel({ setOverride }: { setOverride: (o: { design: Desig
                   )}
                   <label className="flex items-center gap-1">
                     stay
-                    <input type="number" min={0} max={60} step={0.1} className="w-14 rounded border border-line px-1" value={k.dwell ?? sequence.defaults?.dwell ?? 0} onChange={(e) => setSequence(updateKeyframe(sequence, i, { dwell: Math.max(0, Number(e.target.value)) }))} />s
+                    <NumberInput min={0} max={60} step={0.1} className="w-14 rounded border border-line px-1" value={k.dwell ?? sequence.defaults?.dwell ?? 0} onValue={(dwell) => setSequence(updateKeyframe(sequence, i, { dwell }))} />s
                   </label>
                 </div>
               </li>
