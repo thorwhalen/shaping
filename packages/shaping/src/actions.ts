@@ -69,3 +69,23 @@ export function switchGenre(d: Design, genreId: string, genres: GenreTable): Des
     ...(d.sequence ? { sequence: d.sequence } : {}),
   };
 }
+
+/**
+ * Every source a design holds: its own, and those kept for other genres (`genreState`), each with a
+ * path naming where it is ("figure", "shadow-blocks/front"). Anything that inspects or rewrites
+ * sources (images to embed, remote images to hold, a link's size) must go through these two.
+ */
+export function allSources(d: Design): Array<[string, Source]> {
+  const kept = Object.entries(d.genreState ?? {}).flatMap(([genre, g]) => Object.entries(g.sources).map(([slot, s]): [string, Source] => [`${genre}/${slot}`, s]));
+  return [...Object.entries(d.sources), ...kept];
+}
+
+/** Rewrite every source a design holds (its own and those kept for other genres). */
+export function mapSources(d: Design, fn: (s: Source) => Source): Design {
+  const map = (ss: Record<string, Source>) => Object.fromEntries(Object.entries(ss).map(([k, s]) => [k, fn(s)]));
+  return {
+    ...d,
+    sources: map(d.sources),
+    ...(d.genreState ? { genreState: Object.fromEntries(Object.entries(d.genreState).map(([g, st]) => [g, { ...st, sources: map(st.sources) }])) } : {}),
+  };
+}

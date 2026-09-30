@@ -5,6 +5,7 @@
  * turning a genre dial never re-traces an image.
  */
 import { produce } from 'immer';
+import { flushPose } from '../viewer/Viewer';
 import { emptyHistory, record, redo, undo, type History } from './history';
 import { buildKey, prepareParams, type Design, type Figure, type Model } from 'shaping';
 import { genres } from '../genres';
@@ -42,7 +43,7 @@ export interface AppState {
   /** Change the open design with a function `(design) => design` (the shape of every user action). */
   update(fn: (d: Design) => Design): void;
   /** Change the open design in place with an immer recipe. */
-  edit(recipe: (d: Design) => void): void;
+  edit(recipe: (d: Design) => void, kind?: string): void;
   setActiveSlot(slot: string): void;
   /** Undo and redo (every change to the design, grouped by pauses). */
   undo(): void;
@@ -142,9 +143,9 @@ export const useApp = create<AppState>()((set, get) => {
   let history: History<Design> = emptyHistory();
 
   /** Replace the design, remembering the old one for undo. */
-  function commit(before: Design, after: Design) {
+  function commit(before: Design, after: Design, kind = 'edit') {
     if (after === before) return;
-    history = record(history, before, Date.now());
+    history = record(history, before, Date.now(), kind);
     set({ design: after, canUndo: true, canRedo: false });
     changed();
   }
@@ -185,12 +186,13 @@ export const useApp = create<AppState>()((set, get) => {
       if (!d) return;
       commit(d, fn(d));
     },
-    edit(recipe) {
+    edit(recipe, kind) {
       const d = get().design;
       if (!d) return;
-      commit(d, produce(d, recipe));
+      commit(d, produce(d, recipe), kind);
     },
     undo() {
+      flushPose.current(); // an orbit still settling is part of what is undone
       const d = get().design;
       const r = d && undo(history, d);
       if (!r) return;
@@ -199,6 +201,7 @@ export const useApp = create<AppState>()((set, get) => {
       changed();
     },
     redo() {
+      flushPose.current();
       const d = get().design;
       const r = d && redo(history, d);
       if (!r) return;

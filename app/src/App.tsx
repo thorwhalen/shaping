@@ -156,7 +156,7 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
   );
   const shiftDrag = useShiftDragLight(design.view, setLight);
   // Orbiting writes the camera pose into the design, so what is stored and exported is what is seen.
-  const setPose = useCallback((pose: Partial<Design['view']>) => edit((d) => void Object.assign(d.view, pose)), [edit]);
+  const setPose = useCallback((pose: Partial<Design['view']>) => edit((d) => void Object.assign(d.view, pose), 'pose'), [edit]);
   const resetView = useCallback(() => {
     edit((d) => void Object.assign(d.view, pick(VIEW_DEFAULTS, POSE_KEYS)));
     setResetKey((k) => k + 1);

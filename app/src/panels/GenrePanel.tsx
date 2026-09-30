@@ -3,7 +3,7 @@
  * express (per-part transforms and colours, one-click fixes) is written here.
  */
 import { useEffect, useState } from 'react';
-import { ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model, recolor } from 'shaping';
+import { buildKey, ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model, recolor } from 'shaping';
 import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
 import { useApp } from '../state/store';
@@ -52,12 +52,21 @@ function ShadowFixes({ design }: { design: Design }) {
   const update = useApp((s) => s.update);
   const model = useApp((s) => s.model);
   const stale = useApp((s) => s.stale);
+  const error = useApp((s) => s.error);
   const figures = useApp((s) => s.figures);
   const [pending, setPending] = useState<{ label: string; before: ReturnType<typeof stats> } | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [trying, setTrying] = useState<string | null>(null);
   const p = genres[design.genre].params.parse(design.params) as { frame: string; thicken: number; keepLargest: boolean; basePlate: boolean; assign: string };
   const now = stats(model);
+
+  // A fix whose build failed (or a design that changed under it) must not leave the buttons disabled.
+  useEffect(() => {
+    if (!pending || stale || !error) return;
+    setOutcome(`${pending.label}: ${error}`);
+    setPending(null);
+  }, [error, stale]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => setPending(null), [design.id, design.genre]);
 
   // When the rebuilt object arrives, say what the fix changed.
   useEffect(() => {
@@ -76,7 +85,13 @@ function ShadowFixes({ design }: { design: Design }) {
 
   async function tryArrangements() {
     setOutcome(null);
+    if (Object.values(figures).some((v) => !v.figure)) return setOutcome('Some figures are not ready yet; try again in a moment.');
     const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
+    const startKey = buildKey(design);
+    const unchanged = () => {
+      const d = useApp.getState().design;
+      return d && d.id === design.id && d.genre === design.genre && buildKey(d) === startKey;
+    };
     const score = (m: Model | null) => (m ? (stats(m)!.missing) + 0.05 * (m.diagnostics.pieces - 1) : Infinity);
     const start = { assign: p.assign, score: score(model) };
     let best = start;
@@ -84,9 +99,12 @@ function ShadowFixes({ design }: { design: Design }) {
       for (const [i, assign] of ASSIGNMENTS.entries()) {
         setTrying(`Trying ${i + 1} of ${ASSIGNMENTS.length}…`);
         const m = await geometry().build(setParam(design, 'assign', assign), figs, 'probe');
+        if (!unchanged()) return setOutcome('The design changed while trying: nothing was applied.');
         const s = score(m);
         if (s < best.score - 1e-6) best = { assign, score: s };
       }
+    } catch (e) {
+      return setOutcome(`Could not try the assignments: ${(e as Error).message}`);
     } finally {
       setTrying(null);
     }

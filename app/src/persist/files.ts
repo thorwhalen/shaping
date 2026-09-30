@@ -12,7 +12,7 @@
  * design read is validated with `DesignSchema`; in a collection an invalid item is reported and
  * the others still import. Files are told apart by their content, never by their name.
  */
-import { DesignSchema, formatIssues, type Design } from 'shaping';
+import { allSources, DesignSchema, formatIssues, mapSources, type Design } from 'shaping';
 import { holdRemoteImages } from './incoming';
 import { z } from 'zod';
 import { bytesToDataUrl, dataUrlToBytes } from './dataurl';
@@ -36,15 +36,12 @@ const ImagesSchema = z.record(z.string(), z.object({ dataUrl: z.string(), name: 
 
 /** The image references of a design that live in the blob store. */
 export function blobRefs(design: Design, blobs: BlobStore): string[] {
-  return Object.values(design.sources).flatMap((s) => (s.kind === 'image' && blobs.isRef(s.src) ? [s.src] : []));
+  return allSources(design).flatMap(([, s]) => (s.kind === 'image' && blobs.isRef(s.src) ? [s.src] : []));
 }
 
 /** Rewrite image references (after they were stored again under other keys). */
 export function remapImages(design: Design, map: ReadonlyMap<string, string>): Design {
-  const sources = Object.fromEntries(
-    Object.entries(design.sources).map(([slot, s]) => [slot, s.kind === 'image' && map.has(s.src) ? { ...s, src: map.get(s.src)! } : s]),
-  );
-  return { ...design, sources };
+  return mapSources(design, (s) => (s.kind === 'image' && map.has(s.src) ? { ...s, src: map.get(s.src)! } : s));
 }
 
 // ---------------------------------------------------------------- writing

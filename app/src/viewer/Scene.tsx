@@ -188,11 +188,12 @@ function RoomWall({ wall }: { wall: RoomPlane }) {
     return new THREE.Matrix4().makeBasis(u, v, n).setPosition(new THREE.Vector3(...wall.centre));
   }, [wall]);
   const cull = useMemo(() => ({ origin: new THREE.Vector3(...wall.centre), normal: new THREE.Vector3(...wall.inward) }) satisfies WallCull, [wall]);
+  const edges = useMemo(() => new THREE.EdgesGeometry(new THREE.PlaneGeometry(wall.width, wall.height)), [wall.width, wall.height]);
+  useEffect(() => () => edges.dispose(), [edges]);
   return (
     <group userData={{ cull }}>
       <group matrixAutoUpdate={false} matrix={matrix}>
-        <lineSegments renderOrder={1}>
-          <edgesGeometry args={[new THREE.PlaneGeometry(wall.width, wall.height)]} />
+        <lineSegments renderOrder={1} geometry={edges}>
           <lineBasicMaterial color={WALL_EDGE_COLOR} />
         </lineSegments>
         <mesh receiveShadow>
@@ -225,7 +226,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
   const regions = model.diagnostics.regions;
   const room = view.room;
   const wallRegions = room !== 'none' ? regions.filter((x) => x.role === 'target' || x.role === 'achieved' || x.role === 'missing') : [];
-  const bigWalls = useMemo(() => roomPlanes(model, view), [model, view]);
+  const bigWalls = useMemo(() => roomPlanes(model, view), [model, view.room, view.wallGap]); // eslint-disable-line react-hooks/exhaustive-deps
   // One group per wall (a view's slot), which hides itself when the camera is behind it.
   const wallSlots = useMemo(() => {
     const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);

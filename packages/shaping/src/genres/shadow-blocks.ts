@@ -163,6 +163,8 @@ export const shadowBlocks = defineGenre({
   },
   build(figures, params, { kernel: k }) {
     const order = params.assign.split(',') as SlotId[];
+    // How far the figures may reach beyond the block's outline: the frame and the thickening.
+    const margin = (params.frame !== 'none' ? params.frameWidth : 0) + params.thicken;
     const warnings: string[] = [];
     const regions = {} as Record<SlotId, Region>;
     const components = {} as Record<SlotId, number>;
@@ -173,6 +175,8 @@ export const shadowBlocks = defineGenre({
       r = placeRegion(k, r, params.placement[view]);
       if (params.frame !== 'none') r = k.union2([r, frameRegion(k, params.frame, params.frameWidth, hu, hv, roundView(params.block, view))]);
       if (params.thicken > 0) r = k.offset2(r, params.thicken, 'round');
+      // A round face (an ellipse) can only cast what lies inside its outline: the rest is not asked for.
+      if (roundView(params.block, view)) r = k.intersect2(r, k.region([{ outer: outline(true, hu + margin, hv + margin), holes: [] }]));
       regions[view] = r;
       components[view] = k.components2(r).length;
     });
@@ -185,7 +189,7 @@ export const shadowBlocks = defineGenre({
     const length = 2 * reach * 1.1;
     const prisms = SLOT_IDS.map((v) => k.transform(k.extrude(regions[v], length, { center: true }), invertRigid(VIEWS[v])));
     let solid: Solid = k.intersect(prisms);
-    const shape = blockSolid(k, params.block, params.frame !== 'none' ? params.frameWidth : 0);
+    const shape = blockSolid(k, params.block, margin);
     if (shape) solid = k.intersect([solid, shape]);
 
     if (k.isEmpty(solid))

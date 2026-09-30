@@ -8,7 +8,7 @@ beforeAll(async () => {
 });
 
 const example = (name: string) => JSON.parse(readFileSync(new URL(`../../../../examples/${name}.json`, import.meta.url), 'utf8'));
-const design = (genre: string, sources: object, params: object = {}) => ({ version: 1, id: 't', genre, sources, params });
+const design = (genre: string, sources: object, params: object = {}) => ({ version: 3, id: 't', genre, sources, params });
 const shape = (shape: string, extra: object = {}) => ({ kind: 'shape', shape, ...extra });
 
 describe('shadow blocks', () => {
@@ -162,7 +162,7 @@ describe('design migration', () => {
     const { parseDesign } = await import('../index.js');
     const v1 = { version: 1, id: 'm', genre: 'turned', sources: { figure: { kind: 'text', text: 'KO', round: 0.2 } } };
     const d = parseDesign(v1);
-    expect(d.version).toBe(2);
+    expect(d.version).toBe(3);
     expect((d.sources.figure as { round: number }).round).toBeCloseTo(0.2 / 0.49, 6);
     const again = parseDesign(d);
     expect(again).toEqual(d);
@@ -230,5 +230,34 @@ describe('switching genre', () => {
     expect(back.params).toEqual(d0.params);
     expect(back.prepare).toEqual(d0.prepare);
     expect(parseDesign(back).genreState?.turned).toBeDefined();
+  });
+});
+
+describe('design version 3', () => {
+  it('older designs keep fitting drawings, images and SVGs by their content, in every genre', async () => {
+    const { parseDesign } = await import('../index.js');
+    const v2 = {
+      version: 2, id: 'o', genre: 'turned',
+      sources: { figure: { kind: 'drawing', width: 100, height: 100, objects: [] } },
+      genreState: { 'shadow-blocks': { sources: { front: { kind: 'svg', svg: '<svg/>' }, side: { kind: 'shape', shape: 'circle' }, top: { kind: 'image', src: 'data:,' } } } },
+      view: { walls: false },
+      sequence: { keyframes: [{ id: 'a', state: { view: { walls: false } } }] },
+    };
+    const d = parseDesign(v2);
+    expect(d.version).toBe(3);
+    expect(d.prepare.figure?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.front?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.top?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.side).toBeUndefined();
+    expect(d.view.room).toBe('none');
+    expect((d.sequence as { keyframes: Array<{ state: { view: { room: string } } }> }).keyframes[0].state.view.room).toBe('none');
+  });
+});
+
+describe('round blocks', () => {
+  it('a sphere of three squares, with a frame and thickening, casts everything it is asked to', async () => {
+    const block = { shape: 'sphere', width: 1, depth: 1, height: 1 };
+    const m = await build(design('shadow-blocks', { front: shape('rect'), side: shape('rect'), top: shape('rect') }, { fit: 'stretch', block, frame: 'border', thicken: 0.1 }), { kernel });
+    for (const s of m.diagnostics.shadows!) expect(s.missingShare, s.slot).toBeLessThan(0.01);
   });
 });

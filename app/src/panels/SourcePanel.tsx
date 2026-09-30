@@ -87,7 +87,8 @@ export function SourcePanel({ profileId }: { profileId: string }) {
 
   // The proportions this slot's figure is fitted into (e.g. one face of a shadow block), if the genre says.
   const slotAspect = (() => {
-    const f = genre.slotFrame?.(genre.params.parse(design.params), slot.id);
+    const parsed = genre.params.safeParse(design.params);
+    const f = parsed.success ? genre.slotFrame?.(parsed.data, slot.id) : undefined;
     return f ? f[0] / f[1] : undefined;
   })();
   const figureError = figures[slot.id]?.error;

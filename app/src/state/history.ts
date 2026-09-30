@@ -9,16 +9,22 @@ export const GROUP_MS = 500;
 export interface History<T> {
   past: T[];
   future: T[];
-  /** When the last change was recorded (ms), for grouping. */
+  /** When the last change was recorded (ms), and its kind, for grouping. */
   lastAt: number;
+  lastKind?: string;
 }
 
 export const emptyHistory = <T>(): History<T> => ({ past: [], future: [], lastAt: 0 });
 
-/** Record that `before` is being replaced at time `now`. A new change clears what was undone. */
-export function record<T>(h: History<T>, before: T, now: number): History<T> {
-  const past = now - h.lastAt > GROUP_MS ? [...h.past, before].slice(-HISTORY_LIMIT) : h.past;
-  return { past, future: [], lastAt: now };
+/**
+ * Record that `before` is being replaced at time `now`. Changes of the same kind in quick
+ * succession form one step (a slider drag, an orbit); a different kind always starts a new step.
+ * A new change clears what was undone.
+ */
+export function record<T>(h: History<T>, before: T, now: number, kind = 'edit'): History<T> {
+  const grouped = kind === h.lastKind && now - h.lastAt <= GROUP_MS;
+  const past = grouped ? h.past : [...h.past, before].slice(-HISTORY_LIMIT);
+  return { past, future: [], lastAt: now, lastKind: kind };
 }
 
 export function undo<T>(h: History<T>, current: T): { value: T; history: History<T> } | null {

@@ -19,3 +19,13 @@ describe('history', () => {
     expect(undo(emptyHistory<number>(), 1)).toBeNull();
   });
 });
+
+describe('history kinds', () => {
+  it('an orbit and a click in quick succession are two steps', () => {
+    let h = emptyHistory<string>();
+    h = record(h, 'a', 1000, 'pose');
+    h = record(h, 'b', 1100, 'pose');
+    h = record(h, 'c', 1200, 'edit');
+    expect(h.past).toEqual(['a', 'c']);
+  });
+});

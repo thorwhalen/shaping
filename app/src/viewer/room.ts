@@ -62,10 +62,13 @@ export function roomBox(model: Model, view: View): Box3 {
   const min = [...b.min] as Vec3;
   const max = [...b.max] as Vec3;
   const walls = shadowWalls(model);
+  // Without shadow walls, every wall stands at the same distance (a share of the object's largest
+  // extent), and the floor is where the object stands.
+  const largest = Math.max(...[0, 1, 2].map((i) => b.max[i] - b.min[i]), 1);
   for (let a = 0; a < 3; a++) {
     const w = walls.find((x) => x.axis === a);
-    const gap = w ? (w.side === 'min' ? b.min[a] - w.at : w.at - b.max[a]) : view.wallGap * (b.max[a] - b.min[a] || 1);
-    min[a] = b.min[a] - gap;
+    const gap = w ? (w.side === 'min' ? b.min[a] - w.at : w.at - b.max[a]) : view.wallGap * largest;
+    min[a] = b.min[a] - (w || a !== 2 ? gap : 0);
     max[a] = b.max[a] + gap;
   }
   return { min, max };
