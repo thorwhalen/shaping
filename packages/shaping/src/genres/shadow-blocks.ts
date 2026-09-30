@@ -92,11 +92,33 @@ function placeRegion(k: Kernel, r: Region, p: Placement): Region {
   return k.transform2(r, { mirrorX: p.mirror, rotateDeg: Number(p.rotate), scale: p.scale, translate: [p.offsetU, p.offsetV] });
 }
 
-/** A border around the view's rectangle (half extents hu, hv), or a bar along its bottom. */
-function frameRegion(k: Kernel, kind: 'border' | 'base-bar', w: number, hu: number, hv: number): Region {
+/** Whether a view of the block is round (an ellipse) rather than a rectangle. */
+function roundView(b: Block, view: SlotId): boolean {
+  return b.shape === 'sphere' || (b.shape === 'cylinder' && view === 'top');
+}
+
+/** The block's outline in a view: a rectangle, or an ellipse for the round faces. */
+function outline(round: boolean, hu: number, hv: number) {
+  if (!round) return [[-hu, -hv], [hu, -hv], [hu, hv], [-hu, hv]] as [number, number][];
+  return Array.from({ length: ROUND_BLOCK_SEGMENTS }, (_, i): [number, number] => {
+    const a = (2 * Math.PI * i) / ROUND_BLOCK_SEGMENTS;
+    return [hu * Math.cos(a), hv * Math.sin(a)];
+  });
+}
+
+/**
+ * A border that follows the block's outline in this view (width w), or a bar along its bottom
+ * (clipped to the outline), so the frame always lies within the block.
+ */
+function frameRegion(k: Kernel, kind: 'border' | 'base-bar', w: number, hu: number, hv: number, round: boolean): Region {
+  const outer = k.region([{ outer: outline(round, hu + w, hv + w), holes: [] }]);
+  const inner = k.region([{ outer: outline(round, hu, hv), holes: [] }]);
+  if (kind === 'border') return k.subtract2(outer, inner);
   const ou = hu + w, ov = hv + w;
-  if (kind === 'base-bar') return k.region([{ outer: [[-ou, -ov], [ou, -ov], [ou, -hv], [-ou, -hv]], holes: [] }]);
-  return k.region([{ outer: [[-ou, -ov], [ou, -ov], [ou, ov], [-ou, ov]], holes: [[[-hu, -hv], [-hu, hv], [hu, hv], [hu, -hv]]] }]);
+  // Under a rectangle the bar sits just below it; under an ellipse it reaches in by w, or it would be a sliver.
+  const top = round ? -hv + w : -hv;
+  const bar = k.region([{ outer: [[-ou, -ov], [ou, -ov], [ou, top], [-ou, top]], holes: [] }]);
+  return k.intersect2(bar, outer);
 }
 
 /** The block's own solid, for shapes that cut more than the three extrusions do. */
@@ -106,7 +128,7 @@ function blockSolid(k: Kernel, b: Block, margin: number): Solid | null {
   if (b.shape === 'cylinder') {
     const ellipse = Array.from({ length: ROUND_BLOCK_SEGMENTS }, (_, i): [number, number] => {
       const a = (2 * Math.PI * i) / ROUND_BLOCK_SEGMENTS;
-      return [hx * Math.cos(a), hy * Math.sin(a)];
+      return [(hx + margin) * Math.cos(a), (hy + margin) * Math.sin(a)];
     });
     return k.extrude(k.region([{ outer: ellipse, holes: [] }]), 2 * (hz + margin), { center: true });
   }
@@ -115,7 +137,7 @@ function blockSolid(k: Kernel, b: Block, margin: number): Solid | null {
     const a = -Math.PI / 2 + (Math.PI * i) / (ROUND_BLOCK_SEGMENTS / 2);
     return [Math.max(0, Math.cos(a)), Math.sin(a)];
   });
-  return k.scale(k.revolve(k.region([{ outer: half, holes: [] }]), { segments: ROUND_BLOCK_SEGMENTS }), [hx, hy, hz]);
+  return k.scale(k.revolve(k.region([{ outer: half, holes: [] }]), { segments: ROUND_BLOCK_SEGMENTS }), [hx + margin, hy + margin, hz + margin]);
 }
 
 export const shadowBlocks = defineGenre({
@@ -149,7 +171,7 @@ export const shadowBlocks = defineGenre({
       const [hu, hv] = viewHalf(params.block, view);
       let r = k.region(fitFigure(src, [2 * hu, 2 * hv], params.fit).parts.flatMap((p) => p.polygons));
       r = placeRegion(k, r, params.placement[view]);
-      if (params.frame !== 'none') r = k.union2([r, frameRegion(k, params.frame, params.frameWidth, hu, hv)]);
+      if (params.frame !== 'none') r = k.union2([r, frameRegion(k, params.frame, params.frameWidth, hu, hv, roundView(params.block, view))]);
       if (params.thicken > 0) r = k.offset2(r, params.thicken, 'round');
       regions[view] = r;
       components[view] = k.components2(r).length;
@@ -166,6 +188,8 @@ export const shadowBlocks = defineGenre({
     const shape = blockSolid(k, params.block, params.frame !== 'none' ? params.frameWidth : 0);
     if (shape) solid = k.intersect([solid, shape]);
 
+    if (k.isEmpty(solid))
+      warnings.push('No point lies in all three shadows: the figures do not overlap in space. Move or scale a figure (Placement), draw larger, or set Fit to "content".');
     // Pieces: drop dust, or keep the largest only.
     const pieces = k.decompose(solid);
     if (pieces.length > 1) {

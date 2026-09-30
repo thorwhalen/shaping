@@ -173,6 +173,8 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
 
 function Capture() {
   const { gl, scene } = useThree();
+  // Development only: let the browser checks inspect the scene.
+  if (import.meta.env.DEV) (window as unknown as { __scene?: unknown }).__scene = scene;
   useEffect(() => {
     captureRef.current = async ({ design, model, width, height, transparent }) => {
       frameOverride.set?.({ design, model });

@@ -35,7 +35,11 @@ export function GenrePanel() {
 
 /** The shape's state that the fixes act on: how much of the shadows is missing, and in how many pieces. */
 function stats(m: Model | null) {
-  return m ? { missing: m.diagnostics.shadows?.reduce((a, s) => a + s.missingShare, 0) ?? 0, pieces: m.diagnostics.pieces } : null;
+  if (!m) return null;
+  // The share of all three shadows' area that is missing (never more than 100 %).
+  const sh = m.diagnostics.shadows ?? [];
+  const target = sh.reduce((a, s) => a + s.targetArea, 0);
+  return { missing: target > 0 ? sh.reduce((a, s) => a + s.missingArea, 0) / target : 0, pieces: m.diagnostics.pieces };
 }
 const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
 

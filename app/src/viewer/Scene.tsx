@@ -63,6 +63,10 @@ const AXIS_LIGHTS: Array<[number, number, number]> = [
 /** Each axis light's share of the light intensity dial. */
 const AXIS_LIGHT_SHARE = 0.6;
 
+/** Walls read as walls on any background: a warm grey, with a thin darker edge on room walls. */
+const WALL_COLOR = '#e4ded3';
+const WALL_EDGE_COLOR = '#b9b1a3';
+
 /** Share of the fill light given to the ambient term (the rest is the sky/ground hemisphere). */
 const AMBIENT_SHARE_OF_FILL = 0.5;
 /** Pushes shadow lookups off curved inner walls, against speckled self-shadowing. */
@@ -167,7 +171,7 @@ function Walls({ regions, size }: { regions: PlanarRegion[]; size: number }) {
         <group key={w.id} matrixAutoUpdate={false} matrix={w.matrix}>
           <mesh receiveShadow>
             <planeGeometry args={[w.w, w.h]} />
-            <meshStandardMaterial color="#ffffff" roughness={0.95} side={THREE.DoubleSide} />
+            <meshStandardMaterial color={WALL_COLOR} roughness={0.95} side={THREE.DoubleSide} />
           </mesh>
         </group>
       ))}
@@ -187,9 +191,13 @@ function RoomWall({ wall }: { wall: RoomPlane }) {
   return (
     <group userData={{ cull }}>
       <group matrixAutoUpdate={false} matrix={matrix}>
+        <lineSegments renderOrder={1}>
+          <edgesGeometry args={[new THREE.PlaneGeometry(wall.width, wall.height)]} />
+          <lineBasicMaterial color={WALL_EDGE_COLOR} />
+        </lineSegments>
         <mesh receiveShadow>
           <planeGeometry args={[wall.width, wall.height]} />
-          <meshStandardMaterial color="#ffffff" roughness={0.95} side={THREE.DoubleSide} />
+          <meshStandardMaterial color={WALL_COLOR} roughness={0.95} side={THREE.DoubleSide} />
         </mesh>
       </group>
     </group>
