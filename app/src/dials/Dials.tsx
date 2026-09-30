@@ -125,22 +125,17 @@ function Field({ name, path, schema, value, siblings, onChange }: { name: string
           <input type="checkbox" checked={isAuto} onChange={(e) => onChange(path, e.target.checked ? null : shown)} /> auto
         </label>
       ) : undefined}>
-        <div className="flex items-center gap-2">
-          <Slider
-            label={title}
-            min={min}
-            max={max}
-            step={step}
-            value={shown}
-            disabled={isAuto}
-            restGhost={typeof base.default === 'number' ? base.default : undefined}
-            onChange={(v) => onChange(path, type === 'integer' ? Math.round(v) : v)}
-          />
-          <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted">
-            {isAuto ? 'auto' : formatNumber(shown, step)}
-            {!isAuto && base.unit ? ` ${base.unit}` : ''}
-          </span>
-        </div>
+        <Slider
+          label={title}
+          min={min}
+          max={max}
+          step={step}
+          value={shown}
+          disabled={isAuto}
+          restGhost={typeof base.default === 'number' ? base.default : undefined}
+          onChange={(v) => onChange(path, type === 'integer' ? Math.round(v) : v)}
+          readout={(v) => (isAuto ? 'auto' : `${formatNumber(v, step)}${base.unit ? ` ${base.unit}` : ''}`)}
+        />
       </Row>
     );
   }

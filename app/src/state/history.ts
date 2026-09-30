@@ -19,10 +19,11 @@ export const emptyHistory = <T>(): History<T> => ({ past: [], future: [], lastAt
 /**
  * Record that `before` is being replaced at time `now`. Changes of the same kind in quick
  * succession form one step (a slider drag, an orbit); a different kind always starts a new step.
+ * `continuing`: the change belongs to a step already open (one gesture, however slowly it lands).
  * A new change clears what was undone.
  */
-export function record<T>(h: History<T>, before: T, now: number, kind = 'edit'): History<T> {
-  const grouped = kind === h.lastKind && now - h.lastAt <= GROUP_MS;
+export function record<T>(h: History<T>, before: T, now: number, kind = 'edit', continuing = false): History<T> {
+  const grouped = continuing || (kind === h.lastKind && now - h.lastAt <= GROUP_MS);
   const past = grouped ? h.past : [...h.past, before].slice(-HISTORY_LIMIT);
   return { past, future: [], lastAt: now, lastKind: kind };
 }

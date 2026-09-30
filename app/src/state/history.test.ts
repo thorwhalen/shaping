@@ -29,3 +29,11 @@ describe('history kinds', () => {
     expect(h.past).toEqual(['a', 'c']);
   });
 });
+
+describe('a continuing change (one gesture)', () => {
+  it('joins the open step however long after the last change it lands', () => {
+    let h = record(emptyHistory<number>(), 1, 0);
+    h = record(h, 2, 10_000, 'edit', true);
+    expect(h.past).toEqual([1]);
+  });
+});
