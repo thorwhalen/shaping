@@ -45,6 +45,8 @@ export interface AppState {
   /** Change the open design in place with an immer recipe. */
   edit(recipe: (d: Design) => void, kind?: string): void;
   setActiveSlot(slot: string): void;
+  /** A paced gesture (a slider drag) starts or ends: its changes form one undo step, however slowly they land. */
+  setGesture(active: boolean): void;
   /** Undo and redo (every change to the design, grouped by pauses). */
   undo(): void;
   redo(): void;
@@ -141,11 +143,14 @@ export const useApp = create<AppState>()((set, get) => {
   }
 
   let history: History<Design> = emptyHistory();
+  /** `open`: a gesture is on and has not changed the design yet; `recorded`: its undo step exists. */
+  let gesture: 'off' | 'open' | 'recorded' = 'off';
 
   /** Replace the design, remembering the old one for undo. */
   function commit(before: Design, after: Design, kind = 'edit') {
     if (after === before) return;
-    history = record(history, before, Date.now(), kind);
+    history = record(history, before, Date.now(), kind, gesture === 'recorded');
+    if (gesture === 'open') gesture = 'recorded';
     set({ design: after, canUndo: true, canRedo: false });
     changed();
   }
@@ -175,6 +180,7 @@ export const useApp = create<AppState>()((set, get) => {
       builtKey = '';
       buildingKey = '';
       history = emptyHistory();
+      if (gesture !== 'off') gesture = 'open';
       // Anything still running for the previous design is now older than what is on screen.
       appliedSeq = ++refreshSeq;
       clearTimeout(busyTimer);
@@ -197,6 +203,7 @@ export const useApp = create<AppState>()((set, get) => {
       const r = d && undo(history, d);
       if (!r) return;
       history = r.history;
+      if (gesture !== 'off') gesture = 'open';
       set({ design: r.value, canUndo: history.past.length > 0, canRedo: history.future.length > 0 });
       changed();
     },
@@ -206,11 +213,13 @@ export const useApp = create<AppState>()((set, get) => {
       const r = d && redo(history, d);
       if (!r) return;
       history = r.history;
+      if (gesture !== 'off') gesture = 'open';
       set({ design: r.value, canUndo: history.past.length > 0, canRedo: history.future.length > 0 });
       changed();
     },
     canUndo: false,
     canRedo: false,
     setActiveSlot: (slot) => set({ activeSlot: slot }),
+    setGesture: (active) => void (gesture = active ? 'open' : 'off'),
   };
 });

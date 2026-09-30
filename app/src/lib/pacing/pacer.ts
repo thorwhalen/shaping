@@ -2,7 +2,8 @@
  * Paced updates: a stream of values (a slider being dragged) drives expensive work (a rebuild, a
  * re-render), and the device may not keep up. Three rules, in order of importance:
  *
- * 1. **The last value always lands.** `commit` (release, key up, blur) is applied no matter what.
+ * 1. **The last value always lands, at once.** `commit` (release, key up, blur) is applied immediately,
+ *    without waiting for work in flight, so an undo or a switch that follows it acts on it.
  * 2. **Never queue stale work.** At most one value is being applied; while it is, newer values
  *    replace each other and only the newest is applied next (latest-wins backpressure). So the
  *    screen follows the hand as fast as the work allows, and never replays a backlog after release.
@@ -35,15 +36,18 @@ export interface LoadOptions {
   recoverRatio?: number;
   /** Weight of the newest sample in the moving average. */
   weight?: number;
+  /** Samples are capped here (default 4 × budget), so one cold start cannot keep the estimate slow for long. */
+  maxSampleMs?: number;
 }
 
-export function createLoad({ budgetMs = DEFAULT_BUDGET_MS, recoverRatio = 0.6, weight = 0.4 }: LoadOptions = {}): Load {
+export function createLoad({ budgetMs = DEFAULT_BUDGET_MS, recoverRatio = 0.6, weight = 0.4, maxSampleMs = 4 * budgetMs }: LoadOptions = {}): Load {
   let estimate = 0;
   let samples = 0;
   let slow = false;
   return {
     sample(ms) {
-      estimate = samples++ === 0 ? ms : estimate + weight * (ms - estimate);
+      const x = Math.min(ms, maxSampleMs);
+      estimate = samples++ === 0 ? x : estimate + weight * (x - estimate);
       if (estimate > budgetMs) slow = true;
       else if (estimate < budgetMs * recoverRatio) slow = false;
     },
@@ -71,6 +75,9 @@ export interface Timers {
 }
 const realTimers: Timers = { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) };
 
+/** A hidden page paints nothing, so its round trips say nothing about the device. */
+const pageHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+
 export interface PacerOptions {
   /** Resolves when the effect of the last apply is on screen. Default: the next painted frame. */
   settled?: () => Promise<void>;
@@ -79,6 +86,10 @@ export interface PacerOptions {
   maxWaitMs?: number;
   /** Called whenever nothing is pending or being applied. */
   onIdle?: () => void;
+  /** A gesture starts with the first value pushed and ends when its committed value is on screen (or it is cancelled). */
+  onGesture?: (active: boolean) => void;
+  /** Called when `apply` throws; the pacer carries on. Default: `console.error`. */
+  onError?: (error: unknown) => void;
   now?: () => number;
   timers?: Timers;
 }
@@ -86,10 +97,11 @@ export interface PacerOptions {
 export interface Pacer<T> {
   /** An intermediate value: applied now, next, or (under load) when the stream pauses. */
   push(value: T): void;
-  /** The final value (default: the last pushed one): always applied, after anything in flight. */
+  /** The final value (default: the last pushed one, if not already applied): applied at once. */
   commit(value?: T): void;
   readonly busy: boolean;
-  dispose(): void;
+  /** Drop anything pending and end the gesture. The pacer stays usable. */
+  cancel(): void;
 }
 
 export function createPacer<T>(apply: (value: T, final: boolean) => void, options: PacerOptions = {}): Pacer<T> {
@@ -99,24 +111,36 @@ export function createPacer<T>(apply: (value: T, final: boolean) => void, option
     settleMs = DEFAULT_SETTLE_MS,
     maxWaitMs = DEFAULT_MAX_WAIT_MS,
     onIdle,
+    onGesture,
+    onError = (e: unknown) => console.error(e),
     now = () => performance.now(),
     timers = realTimers,
   } = options;
-  /** `due`: apply even under load (a commit, or a pause in the stream). */
-  let pending: { value: T; final: boolean; due: boolean } | null = null;
-  let last: { value: T } | null = null;
-  let applied: { value: T } | null = null;
-  let inFlight = false;
+  type Entry = { value: T; applied: boolean; due: boolean };
+  /** The newest pushed value, until committed. */
+  let last: Entry | null = null;
+  /** The value waiting to be applied (always `last`, when set). */
+  let pending: Entry | null = null;
+  /** Token of the newest apply still waiting for its result; older ones finishing are ignored. */
+  let inFlight = 0;
+  let seq = 0;
   let pause: unknown = null;
-  let disposed = false;
+  let gesture = false;
+  /** The gesture was committed; it ends when the work in flight lands. */
+  let closing = false;
 
+  const setGesture = (active: boolean) => {
+    if (gesture === active) return;
+    gesture = active;
+    onGesture?.(active);
+  };
+
+  /** Resolves `true` if the result reached the screen, `false` if we stopped waiting. */
   const waitAtMost = (p: Promise<void>) =>
-    new Promise<void>((resolve) => {
-      const t = timers.set(resolve, maxWaitMs);
-      p.then(
-        () => (timers.clear(t), resolve()),
-        () => (timers.clear(t), resolve()),
-      );
+    new Promise<boolean>((resolve) => {
+      const t = timers.set(() => resolve(false), maxWaitMs);
+      const done = () => (timers.clear(t), resolve(true));
+      p.then(done, done);
     });
 
   function holdUntilPause() {
@@ -124,52 +148,59 @@ export function createPacer<T>(apply: (value: T, final: boolean) => void, option
     pause = timers.set(() => {
       pause = null;
       if (pending) pending.due = true;
-      void pump();
+      pump();
     }, settleMs);
   }
 
-  async function pump(): Promise<void> {
-    if (disposed || inFlight) return;
-    if (!pending) return onIdle?.();
-    if (!pending.due && load.slow) return holdUntilPause();
-    const { value, final } = pending;
-    pending = null;
-    if (final) last = null;
-    if (applied && Object.is(applied.value, value)) return pump();
-    inFlight = true;
-    applied = { value };
+  async function run(value: T, final: boolean) {
+    const token = (inFlight = ++seq);
     const t0 = now();
     try {
       apply(value, final);
-      await waitAtMost(settled());
-    } finally {
-      load.sample(now() - t0);
-      inFlight = false;
+    } catch (e) {
+      onError(e);
     }
-    return pump();
+    const reached = await waitAtMost(settled());
+    if (reached && !pageHidden()) load.sample(now() - t0);
+    if (token !== inFlight) return; // a newer apply (a commit) overtook this one
+    inFlight = 0;
+    if ((final || closing) && !pending) (closing = false, setGesture(false));
+    pump();
+  }
+
+  function pump() {
+    if (inFlight) return;
+    if (!pending) return onIdle?.();
+    if (!pending.due && load.slow) return holdUntilPause();
+    const entry = pending;
+    pending = null;
+    entry.applied = true;
+    void run(entry.value, false);
   }
 
   return {
     push(value) {
-      last = { value };
-      pending = { value, final: false, due: false };
-      void pump();
+      closing = false;
+      setGesture(true);
+      last = pending = { value, applied: false, due: false };
+      pump();
     },
     commit(value) {
-      const v = value !== undefined ? { value } : last;
-      last = null;
-      if (!v) return;
+      const entry = value !== undefined ? { value } : last && !last.applied ? last : null;
+      last = pending = null;
       timers.clear(pause);
-      pending = { value: v.value, final: true, due: true };
-      void pump();
+      if (entry) return void run(entry.value, true);
+      if (inFlight) closing = true;
+      else (setGesture(false), onIdle?.());
     },
     get busy() {
-      return inFlight || pending !== null;
+      return inFlight !== 0 || pending !== null;
     },
-    dispose() {
-      disposed = true;
+    cancel() {
+      closing = false;
       timers.clear(pause);
-      pending = null;
+      last = pending = null;
+      setGesture(false);
     },
   };
 }

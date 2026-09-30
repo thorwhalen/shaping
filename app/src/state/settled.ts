@@ -18,5 +18,5 @@ export function modelOnScreen(): Promise<void> {
   });
 }
 
-/** What every paced control in the app shares: see `PacingProvider`. */
-export const appPacing = { settled: modelOnScreen };
+/** What every paced control in the app shares: see `PacingProvider`. A drag is one undo step. */
+export const appPacing = { settled: modelOnScreen, onGesture: (active: boolean) => useApp.getState().setGesture(active) };
