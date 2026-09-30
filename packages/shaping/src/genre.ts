@@ -80,6 +80,11 @@ export interface Genre<P = Record<string, unknown>> {
    * Figures are keyed by slot id; each arrives with its parts cleaned by a 2D union.
    */
   build(figures: Record<string, Figure>, params: P, ctx: BuildContext): GenreResult;
+  /**
+   * The rectangle a slot's figure is fitted into, as [width, height] (any unit; only the proportions
+   * matter). A drawing for that slot is best drawn on a page of these proportions.
+   */
+  slotFrame?(params: P, slot: string): [number, number];
 }
 
 /** A 2D-to-3D operator for one part: extrude, revolve, radial array, and those to come. */

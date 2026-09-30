@@ -2,7 +2,7 @@
  * The genre and its dials. The dials come from the genre's own Zod schema; what the schema cannot
  * express (per-part transforms and colours, one-click fixes) is written here.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ASSIGNMENTS, PartTransformSchema, PART_PALETTE, setParam, switchGenre, type Design, type Model, recolor } from 'shaping';
 import { genres } from '../genres';
 import { Dials } from '../dials/Dials';
@@ -33,58 +33,117 @@ export function GenrePanel() {
   );
 }
 
+/** The shape's state that the fixes act on: how much of the shadows is missing, and in how many pieces. */
+function stats(m: Model | null) {
+  return m ? { missing: m.diagnostics.shadows?.reduce((a, s) => a + s.missingShare, 0) ?? 0, pieces: m.diagnostics.pieces } : null;
+}
+const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
+
+/**
+ * The fixes for shadows that do not agree, as toggles that show whether they are on. A click shows
+ * at once that it was taken (the chip pulses while the object rebuilds), and when the new object is
+ * there, a line says what changed ("missing 5.2 % → 0 %, 3 pieces → 1").
+ */
 function ShadowFixes({ design }: { design: Design }) {
   const update = useApp((s) => s.update);
   const model = useApp((s) => s.model);
+  const stale = useApp((s) => s.stale);
   const figures = useApp((s) => s.figures);
-  const [searching, setSearching] = useState(false);
-  const missing = model?.diagnostics.shadows?.reduce((a, s) => a + s.missingShare, 0) ?? 0;
-  const pieces = model?.diagnostics.pieces ?? 1;
+  const [pending, setPending] = useState<{ label: string; before: ReturnType<typeof stats> } | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const [trying, setTrying] = useState<string | null>(null);
+  const p = genres[design.genre].params.parse(design.params) as { frame: string; thicken: number; keepLargest: boolean; basePlate: boolean; assign: string };
+  const now = stats(model);
+
+  // When the rebuilt object arrives, say what the fix changed.
+  useEffect(() => {
+    if (!pending || stale || !now) return;
+    const b = pending.before;
+    const parts = [b ? `missing ${pct(b.missing)} → ${pct(now.missing)}` : `missing ${pct(now.missing)}`, b && b.pieces !== now.pieces ? `${b.pieces} piece${b.pieces > 1 ? 's' : ''} → ${now.pieces}` : `${now.pieces} piece${now.pieces > 1 ? 's' : ''}`];
+    setOutcome(`${pending.label}: ${parts.join(', ')}.`);
+    setPending(null);
+  }, [model, stale]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function apply(label: string, fn: (d: Design) => Design) {
+    setOutcome(null);
+    setPending({ label, before: now });
+    update(fn);
+  }
 
   async function tryArrangements() {
-    setSearching(true);
+    setOutcome(null);
+    const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
+    const score = (m: Model | null) => (m ? (stats(m)!.missing) + 0.05 * (m.diagnostics.pieces - 1) : Infinity);
+    const start = { assign: p.assign, score: score(model) };
+    let best = start;
     try {
-      const figs = Object.fromEntries(Object.entries(figures).map(([k, v]) => [k, v.figure!]));
-      const score = (m: Model | null) => (m ? (m.diagnostics.shadows?.reduce((a, s) => a + s.missingShare, 0) ?? 0) + 0.05 * (m.diagnostics.pieces - 1) : Infinity);
-      let best = { assign: (design.params.assign as string) ?? ASSIGNMENTS[0], score: score(model) };
-      for (const assign of ASSIGNMENTS) {
+      for (const [i, assign] of ASSIGNMENTS.entries()) {
+        setTrying(`Trying ${i + 1} of ${ASSIGNMENTS.length}…`);
         const m = await geometry().build(setParam(design, 'assign', assign), figs, 'probe');
         const s = score(m);
         if (s < best.score - 1e-6) best = { assign, score: s };
       }
-      update((d) => setParam(d, 'assign', best.assign));
     } finally {
-      setSearching(false);
+      setTrying(null);
     }
+    if (best.assign === start.assign) setOutcome('Tried all six assignments: yours is already the best.');
+    else apply(`Assignment ${best.assign.replaceAll(',', ' / ')}`, (d) => setParam(d, 'assign', best.assign));
   }
 
-  const fix = (label: string, fn: (d: Design) => Design, title: string) => (
-    <button title={title} onClick={() => update(fn)} className="rounded border border-line bg-white px-2 py-1 text-xs hover:border-muted">
-      {label}
-    </button>
-  );
+  const toggles: Array<{ label: string; on: boolean; hint: string; set: (d: Design, on: boolean) => Design }> = [
+    { label: 'Frame', on: p.frame === 'border', hint: 'A border on every figure: the third shadow is then always complete.', set: (d, on) => setParam(d, 'frame', on ? 'border' : 'none') },
+    { label: 'Base bar', on: p.frame === 'base-bar', hint: 'A bar along the bottom of every figure.', set: (d, on) => setParam(d, 'frame', on ? 'base-bar' : 'none') },
+    { label: 'Thicken', on: p.thicken > 0, hint: 'Grow every figure a little (fragile strokes become sturdier).', set: (d, on) => setParam(d, 'thicken', on ? THICKEN_STEP : 0) },
+    { label: 'Largest piece only', on: p.keepLargest, hint: 'Drop every piece but the largest.', set: (d, on) => setParam(d, 'keepLargest', on) },
+    { label: 'Base plate', on: p.basePlate, hint: 'A plate underneath joins loose pieces.', set: (d, on) => setParam(d, 'basePlate', on) },
+  ];
+  const busy = Boolean(pending) || Boolean(trying);
 
-  if (missing < 0.001 && pieces <= 1) return <p className="rounded bg-green-50 px-2 py-1 text-xs text-green-800">All three shadows are complete, in one piece.</p>;
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-line bg-white/60 p-2">
-      <p className="text-xs">
-        {missing >= 0.001 && <>The solid misses {(100 * missing).toFixed(1)} % of its shadows (red on the walls). </>}
-        {pieces > 1 && <>It falls into {pieces} pieces. </>}
-        Fixes, in the order worth trying:
+    <div className="flex flex-col gap-2 rounded-md border border-line bg-white/60 p-2" aria-busy={busy}>
+      <p className="text-xs" aria-live="polite">
+        {now ? (
+          now.missing < 0.001 && now.pieces <= 1 ? (
+            <span className="text-green-800">All three shadows complete, in one piece.</span>
+          ) : (
+            <>
+              {now.missing >= 0.001 && <span className="text-red-700">Missing {pct(now.missing)} of the shadows (red on the walls). </span>}
+              {now.pieces > 1 && <span className="text-amber-800">{now.pieces} separate pieces. </span>}
+            </>
+          )
+        ) : (
+          'Building…'
+        )}
+        {stale && <span className="text-muted"> Updating…</span>}
       </p>
-      <div className="flex flex-wrap gap-1">
-        <button onClick={() => void tryArrangements()} disabled={searching} className="rounded border border-accent bg-accent px-2 py-1 text-xs text-white disabled:opacity-60">
-          {searching ? 'Trying…' : 'Try all assignments'}
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Fixes">
+        {toggles.map((t) => {
+          const working = pending?.label.startsWith(t.label);
+          return (
+            <button
+              key={t.label}
+              title={t.hint}
+              aria-pressed={t.on}
+              disabled={busy}
+              onClick={() => apply(`${t.label} ${t.on ? 'off' : 'on'}`, (d) => t.set(d, !t.on))}
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors disabled:cursor-wait ${t.on ? 'border-accent bg-accent text-white' : 'border-line bg-white hover:border-muted'} ${working ? 'animate-pulse' : ''}`}
+            >
+              {t.on ? '✓ ' : ''}
+              {t.label}
+            </button>
+          );
+        })}
+        <button onClick={() => void tryArrangements()} disabled={busy} title="Build all six ways of assigning the figures to the views, and keep the best." className="rounded-full border border-dashed border-muted bg-white px-2.5 py-1 text-xs hover:border-ink disabled:cursor-wait">
+          {trying ?? 'Try all assignments'}
         </button>
-        {fix('Add a frame', (d) => setParam(d, 'frame', 'border'), 'A border on every figure: the third shadow is then always complete.')}
-        {fix('Base bar', (d) => setParam(d, 'frame', 'base-bar'), 'A bar along the bottom of every figure.')}
-        {fix('Thicken', (d) => setParam(d, 'thicken', Math.min(0.3, Number((d.params.thicken as number) ?? 0) + 0.03)), 'Grow every figure a little.')}
-        {fix('Keep largest piece', (d) => setParam(d, 'keepLargest', true), 'Drop every piece but the largest.')}
-        {fix('Base plate', (d) => setParam(d, 'basePlate', true), 'A plate underneath joins loose pieces.')}
       </div>
+      {outcome && <p className="text-xs text-ink" aria-live="polite">{outcome}</p>}
     </div>
   );
 }
+
+/** How much "Thicken" grows the figures when switched on (the dial below sets it precisely). */
+const THICKEN_STEP = 0.04;
 
 function TurnedParts({ design, params }: { design: Design; params: Record<string, unknown> }) {
   const update = useApp((s) => s.update);

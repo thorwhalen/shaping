@@ -119,6 +119,17 @@ export async function sourceToFigure(source: Source, prepare: PrepareParams, ctx
     if (!r) throw new Error(`No resolver for "${k}" sources. Pass one in \`resolvers.${k}\` (the imaging module provides the default).`);
     return r as NonNullable<SourceResolvers[K]>;
   };
+  const figure = await resolveOne(source, prepare, ctx, need);
+  // "content": fit the shape itself, ignoring the page it was drawn on.
+  if (prepare.fit === 'content' && figure.frame) {
+    const { frame: _dropped, ...rest } = figure;
+    void _dropped;
+    return rest;
+  }
+  return figure;
+}
+
+async function resolveOne(source: Source, prepare: PrepareParams, ctx: ResolveContext, need: <K extends keyof SourceResolvers>(k: K) => NonNullable<SourceResolvers[K]>): Promise<Figure> {
   switch (source.kind) {
     case 'shape':
       return shapeFigure(source);

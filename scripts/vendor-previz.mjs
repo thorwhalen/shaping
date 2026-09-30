@@ -11,7 +11,7 @@
  * Run: `node scripts/vendor-previz.mjs [--force]`.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,5 +59,6 @@ if (!tarball) {
 const work = mkdtempSync(join(tmpdir(), 'previz-unpack-'));
 execFileSync('tar', ['-xzf', tarball, '-C', work]);
 rmSync(dest, { recursive: true, force: true });
+mkdirSync(dirname(dest), { recursive: true });
 renameSync(join(work, 'package'), dest);
 console.log(`previz: unpacked ${tarball.split('/').pop()} into vendor/previz`);

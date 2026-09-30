@@ -11,6 +11,7 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import { recolor, type Body, type Design, type Model, type PlanarRegion } from 'shaping';
 import { lightDirection, modelCentre, modelRadius } from './camera';
 import { materialFor } from './materials';
+import { roomPlanes, type RoomPlane } from './room';
 
 /** Normals are smoothed across edges flatter than this, and kept sharp across steeper ones. */
 export const CREASE_ANGLE_DEG = 32;
@@ -47,6 +48,20 @@ export function cullWalls(root: THREE.Object3D, camera: THREE.Camera) {
     camera.getWorldPosition(eye);
   });
 }
+
+/**
+ * The three axis lights, in scene coordinates (y up): parallel light from infinitely far along each
+ * view's axis, so each casts its view's shadow on its own wall and grazes the other two. The model's
+ * front view looks along +y (from scene +z), the side view along -x (from scene +x), the top view
+ * down (from scene +y).
+ */
+const AXIS_LIGHTS: Array<[number, number, number]> = [
+  [0, 0, 1],
+  [1, 0, 0],
+  [0, 1, 0],
+];
+/** Each axis light's share of the light intensity dial. */
+const AXIS_LIGHT_SHARE = 0.6;
 
 /** Share of the fill light given to the ambient term (the rest is the sky/ground hemisphere). */
 const AMBIENT_SHARE_OF_FILL = 0.5;
@@ -130,14 +145,14 @@ function RegionMesh({ region, lift = 0 }: { region: PlanarRegion; lift?: number 
 }
 
 /** Walls behind the shadow regions, so the shadows read as cast on something. */
-function Walls({ regions }: { regions: PlanarRegion[] }) {
+function Walls({ regions, size }: { regions: PlanarRegion[]; size: number }) {
   const walls = useMemo(() => {
     const byWall = new Map<string, PlanarRegion>();
     for (const r of regions) if (r.role === 'target') byWall.set(r.id.split(':')[0], r);
     return [...byWall.values()].map((r) => {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const p of r.polygons) for (const [x, y] of p.outer) ((x0 = Math.min(x0, x)), (y0 = Math.min(y0, y)), (x1 = Math.max(x1, x)), (y1 = Math.max(y1, y)));
-      const pad = 0.25 * Math.max(x1 - x0, y1 - y0);
+      const pad = ((size - 1) / 2) * Math.max(x1 - x0, y1 - y0);
       const u = new THREE.Vector3(...r.u);
       const v = new THREE.Vector3(...r.v);
       const n = new THREE.Vector3().crossVectors(u, v).normalize();
@@ -145,7 +160,7 @@ function Walls({ regions }: { regions: PlanarRegion[] }) {
       const matrix = new THREE.Matrix4().makeBasis(u, v, n).setPosition(centre);
       return { id: r.id, matrix, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
     });
-  }, [regions]);
+  }, [regions, size]);
   return (
     <>
       {walls.map((w) => (
@@ -157,6 +172,27 @@ function Walls({ regions }: { regions: PlanarRegion[] }) {
         </group>
       ))}
     </>
+  );
+}
+
+/** One big wall of a corner or a box room; it hides itself when the camera is behind it. */
+function RoomWall({ wall }: { wall: RoomPlane }) {
+  const matrix = useMemo(() => {
+    const u = new THREE.Vector3(...wall.u);
+    const v = new THREE.Vector3(...wall.v);
+    const n = new THREE.Vector3().crossVectors(u, v);
+    return new THREE.Matrix4().makeBasis(u, v, n).setPosition(new THREE.Vector3(...wall.centre));
+  }, [wall]);
+  const cull = useMemo(() => ({ origin: new THREE.Vector3(...wall.centre), normal: new THREE.Vector3(...wall.inward) }) satisfies WallCull, [wall]);
+  return (
+    <group userData={{ cull }}>
+      <group matrixAutoUpdate={false} matrix={matrix}>
+        <mesh receiveShadow>
+          <planeGeometry args={[wall.width, wall.height]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.95} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+    </group>
   );
 }
 
@@ -179,7 +215,9 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
   const c = modelCentre(b);
   const light = lightDirection(view);
   const regions = model.diagnostics.regions;
-  const wallRegions = view.walls ? regions.filter((x) => x.role === 'target' || x.role === 'achieved' || x.role === 'missing') : [];
+  const room = view.room;
+  const wallRegions = room !== 'none' ? regions.filter((x) => x.role === 'target' || x.role === 'achieved' || x.role === 'missing') : [];
+  const bigWalls = useMemo(() => roomPlanes(model, view), [model, view]);
   // One group per wall (a view's slot), which hides itself when the camera is behind it.
   const wallSlots = useMemo(() => {
     const centre = new THREE.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
@@ -206,7 +244,26 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
       <ambientLight intensity={view.fillIntensity * AMBIENT_SHARE_OF_FILL} />
       <hemisphereLight args={['#ffffff', '#d8cfc0', view.fillIntensity]} />
       <primitive object={sunTarget} position={c} />
-      <directionalLight
+      {view.light === 'axes' &&
+        AXIS_LIGHTS.map((dir, i) => (
+          <directionalLight
+            key={i}
+            target={sunTarget}
+            position={[c[0] + dir[0] * r * 4, c[1] + dir[1] * r * 4, c[2] + dir[2] * r * 4]}
+            intensity={view.lightIntensity * AXIS_LIGHT_SHARE}
+            color={view.lightColor}
+            castShadow
+            shadow-mapSize={[2048, 2048]}
+            shadow-camera-left={-r * 4}
+            shadow-camera-right={r * 4}
+            shadow-camera-top={r * 4}
+            shadow-camera-bottom={-r * 4}
+            shadow-camera-far={r * 12}
+            shadow-bias={-0.0004}
+            shadow-normalBias={r * SHADOW_NORMAL_BIAS_PER_RADIUS}
+          />
+        ))}
+      {view.light === 'sun' && <directionalLight
         target={sunTarget}
         position={[c[0] + light[0] * r * 4, c[1] + light[1] * r * 4, c[2] + light[2] * r * 4]}
         intensity={view.lightIntensity}
@@ -220,7 +277,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
         shadow-camera-far={r * 12}
         shadow-bias={-0.0004}
         shadow-normalBias={r * SHADOW_NORMAL_BIAS_PER_RADIUS}
-      />
+      />}
       <group rotation={Z_UP_TO_Y_UP}>
         <group visible>
           {coloured.bodies.map((body, i) => (
@@ -229,9 +286,12 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
             </group>
           ))}
         </group>
+        {bigWalls.map((w) => (
+          <RoomWall key={w.id} wall={w} />
+        ))}
         {wallSlots.map((slot) => (
           <group key={slot.id} userData={{ cull: slot.cull }}>
-            <Walls regions={slot.regions} />
+            {room === 'shadow' && <Walls regions={slot.regions} size={view.wallSize} />}
             {slot.regions.map((reg) => (
               <RegionMesh key={reg.id} region={reg} lift={reg.role === 'target' ? 0.02 : reg.role === 'missing' ? 0.015 : 0.01} />
             ))}
@@ -240,7 +300,7 @@ export function Scene({ design, model, dimmed = false, showSlices = false }: Sce
         {showSlices && regions.filter((x) => x.role === 'slice').map((reg) => <RegionMesh key={reg.id} region={reg} />)}
         {section && <RegionMesh region={section} />}
       </group>
-      {view.ground && !(view.walls && wallRegions.length) && (
+      {view.ground && (room === 'none' || (room === 'shadow' && !wallRegions.length)) && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[c[0], 0, c[2]]} receiveShadow>
           <planeGeometry args={[r * 12, r * 12]} />
           <shadowMaterial opacity={0.22} />

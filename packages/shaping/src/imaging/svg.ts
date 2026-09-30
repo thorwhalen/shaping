@@ -517,6 +517,8 @@ function topLevelParts(node: XmlNode, parent: Style, env: Env, out: Array<{ id?:
 // ---------------------------------------------------------------- the root
 
 interface Root {
+  /** The view box (or page), transformed like the drawing: the figure's frame. */
+  frame?: { min: Vec2; max: Vec2 };
   matrix: Mat;
   units: Figure['units'];
   extent: number | undefined;
@@ -526,6 +528,12 @@ const parseLength = (s: string | undefined): { value: number; unit: string } | n
   const m = /^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)\s*([a-z%]*)\s*$/i.exec(s ?? '');
   return m ? { value: Number(m[1]), unit: m[2].toLowerCase() } : null;
 };
+
+function framed(m: Mat, x: number, y: number, w: number, h: number): { min: Vec2; max: Vec2 } {
+  const a = apply(m, [x, y]);
+  const b = apply(m, [x + w, y + h]);
+  return { min: [Math.min(a[0], b[0]), Math.min(a[1], b[1])], max: [Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
+}
 
 /** Root transform (viewBox, physical size, y flip), the figure's units and the drawing's longest side. */
 function rootOf(svg: XmlNode): Root {
@@ -552,7 +560,8 @@ function rootOf(svg: XmlNode): Root {
   const top = (box?.y ?? 0) + (userHeight ?? 0);
   const matrix: Mat = [scale, 0, 0, -scale, -(box?.x ?? 0) * scale, top * scale];
   const longest = userWidth !== undefined && userHeight !== undefined ? Math.max(userWidth, userHeight) * scale : undefined;
-  return { matrix, units, extent: longest };
+  const frame = userWidth !== undefined && userHeight !== undefined ? framed(matrix, box?.x ?? 0, box?.y ?? 0, userWidth, userHeight) : undefined;
+  return { matrix, units, extent: longest, ...(frame ? { frame } : {}) };
 }
 
 /** Parse an SVG document into a figure (y up). Throws a helpful error for text and for stroke-only artwork. */
@@ -569,7 +578,7 @@ export function svgToFigure(svgText: string, ctx: ImagingContext): Figure {
   if (found.length === 0) {
     throw new Error('This SVG has no filled shapes. Outlines drawn only as strokes cannot be shaped: convert strokes to paths (Inkscape: Path > Stroke to Path) and give them a fill.');
   }
-  return { units: root.units, parts: found.map((f, i) => toPart(f, i, found, ctx.kernel)) };
+  return { units: root.units, ...(root.frame ? { frame: root.frame } : {}), parts: found.map((f, i) => toPart(f, i, found, ctx.kernel)) };
 }
 
 function toPart(item: { id?: string; shapes: Shape[] }, index: number, all: Array<{ id?: string }>, kernel: Kernel): Part {

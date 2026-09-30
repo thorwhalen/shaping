@@ -6,6 +6,7 @@ import { useApp } from '../state/store';
 export function LookPanel({ onResetView, showSlices, setShowSlices }: { onResetView: () => void; showSlices: boolean; setShowSlices: (v: boolean) => void }) {
   const design = useApp((s) => s.design)!;
   const edit = useApp((s) => s.edit);
+  const setView = (k: string, v: unknown) => edit((d) => void ((d.view as Record<string, unknown>)[k] = v));
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3">
@@ -19,30 +20,44 @@ export function LookPanel({ onResetView, showSlices, setShowSlices }: { onResetV
         </details>
       </section>
       <PartColours />
-      {design.genre === 'shadow-blocks' && (
-        <section className="flex flex-col gap-1">
-          <h3 className="text-sm font-semibold">Light along a wall</h3>
-          <p className="text-xs text-muted">Point the sun straight down one view's axis: its real shadow then falls on that wall, over the designed one.</p>
-          <div className="flex gap-1">
-            {WALL_LIGHTS.map((w) => (
-              <button key={w.label} className="flex-1 rounded border border-line bg-white px-2 py-0.5 text-xs hover:border-muted" onClick={() => edit((d) => void ((d.view.lightAzimuthDeg = w.az), (d.view.lightElevationDeg = w.el), (d.view.walls = true)))}>
-                {w.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
       <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">View and light</h3>
-          <button className="rounded border border-line bg-white px-2 py-0.5 text-xs hover:border-muted" onClick={onResetView}>Reset view</button>
-        </div>
+        <h3 className="text-sm font-semibold">Walls</h3>
+        <Dials schema={ViewSchema} value={design.view} only={['room', 'wallGap', 'wallSize', 'ground']} onChange={setView} />
+        <p className="text-xs text-muted">Walls between the camera and the object are cut away, so you always see the object.</p>
+      </section>
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-semibold">Light</h3>
+        <Dials schema={ViewSchema} value={design.view} only={['light']} onChange={setView} />
+        {design.view.light === 'sun' && (
+          <>
+            <p className="text-xs text-muted">Drag the sun on the ball in the viewer's corner, or Shift + drag on the view.</p>
+            {design.genre === 'shadow-blocks' && (
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-muted">Sun along</span>
+                {WALL_LIGHTS.map((w) => (
+                  <button key={w.label} className="flex-1 rounded border border-line bg-white px-2 py-0.5 hover:border-muted" onClick={() => edit((d) => void ((d.view.lightAzimuthDeg = w.az), (d.view.lightElevationDeg = w.el)))}>
+                    {w.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {design.view.light === 'axes' && <p className="text-xs text-muted">Three parallel lights, one along each view: each casts its view's shadow on its own wall.</p>}
+        {design.view.light === 'off' && <p className="text-xs text-muted">No direct light: only the fill light and reflections.</p>}
         <Dials
           schema={ViewSchema}
           value={design.view}
-          only={['camera', 'walls', 'wallGap', 'ground', 'section', 'sectionOffset', 'azimuthDeg', 'elevationDeg', 'lightAzimuthDeg', 'lightElevationDeg', 'lightIntensity', 'lightColor', 'fillIntensity', 'environmentIntensity']}
-          onChange={(k, v) => edit((d) => void ((d.view as Record<string, unknown>)[k] = v))}
+          only={[...(design.view.light === 'sun' ? ['lightAzimuthDeg', 'lightElevationDeg'] : []), ...(design.view.light !== 'off' ? ['lightIntensity', 'lightColor'] : []), 'fillIntensity', 'environmentIntensity']}
+          onChange={setView}
         />
+      </section>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">View</h3>
+          <button className="rounded border border-line bg-white px-2 py-0.5 text-xs hover:border-muted" onClick={onResetView}>Reset view</button>
+        </div>
+        <Dials schema={ViewSchema} value={design.view} only={['camera', 'azimuthDeg', 'elevationDeg', 'distance', 'fovDeg', 'zoom', 'section', 'sectionOffset']} onChange={setView} />
         <label className="flex cursor-pointer items-center justify-between text-sm">
           <span>Show original slices</span>
           <input type="checkbox" className="h-4 w-4" checked={showSlices} onChange={(e) => setShowSlices(e.target.checked)} />
@@ -52,7 +67,7 @@ export function LookPanel({ onResetView, showSlices, setShowSlices }: { onResetV
   );
 }
 
-/** Sun directions that cast each designed shadow on its wall (scene azimuth 0 looks from the front). */
+/** Sun directions along each view's axis, so its real shadow falls on that wall (scene azimuth 0 looks from the front). */
 const WALL_LIGHTS = [
   { label: 'Front', az: 0, el: 0 },
   { label: 'Side', az: 90, el: 0 },

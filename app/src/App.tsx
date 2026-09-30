@@ -104,6 +104,34 @@ export function App() {
   );
 }
 
+/** Undo and redo buttons, and Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z (Ctrl+Y) anywhere outside a text field. */
+function UndoRedo() {
+  const undo = useApp((s) => s.undo);
+  const redo = useApp((s) => s.redo);
+  const canUndo = useApp((s) => s.canUndo);
+  const canRedo = useApp((s) => s.canRedo);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey)) return;
+      const t = e.target as HTMLElement | null;
+      const typing = t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'color', 'button'].includes((t as HTMLInputElement).type)));
+      if (typing) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) (e.preventDefault(), undo());
+      else if ((k === 'z' && e.shiftKey) || k === 'y') (e.preventDefault(), redo());
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+  const btn = 'rounded px-1.5 py-0.5 text-sm text-muted hover:text-ink disabled:opacity-30';
+  return (
+    <div className="flex items-center">
+      <button className={btn} onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl/Cmd+Z)">↶</button>
+      <button className={btn} onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Shift+Ctrl/Cmd+Z)">↷</button>
+    </div>
+  );
+}
+
 function Loading() {
   return <div className="grid h-full place-items-center text-muted">Opening…</div>;
 }
@@ -142,6 +170,7 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
             ←
           </button>
           <input aria-label="Title" className="min-w-0 flex-1 rounded bg-transparent px-1 font-medium hover:bg-white focus:bg-white" value={design.title} onChange={(e) => edit((d) => void (d.title = e.target.value))} />
+          <UndoRedo />
           <ShareMenu design={design} onOpenDesign={onOpenDesign} />
         </div>
         <nav className="flex border-b border-line" role="tablist">
@@ -159,11 +188,11 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
           {panel === 'output' && <OutputPanel profileId={profileId} setProfileId={setProfileId} />}
         </div>
       </aside>
-      <main className="relative min-h-[50vh] flex-1" {...shiftDrag}>
+      <main className="relative min-h-[50vh] flex-1" {...(design.view.light === "sun" ? shiftDrag : {})}>
         <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
-          <LightBall view={design.view} onChange={setLight} />
+          {design.view.light === 'sun' && <LightBall view={design.view} onChange={setLight} />}
         </Viewer>
         <StatusBar model={model} error={error} profileId={profileId} />
       </main>
