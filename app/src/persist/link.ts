@@ -14,7 +14,7 @@
  * its address.
  */
 import { deflateSync, inflateSync, strFromU8, strToU8 } from 'fflate';
-import { copyDesign, DesignSchema, formatIssues, type Design } from 'shaping';
+import { allSources, copyDesign, DesignSchema, formatIssues, type Design } from 'shaping';
 import { holdRemoteImages, refuseBrowserImages } from './incoming';
 import { fromBase64Url, toBase64Url } from './dataurl';
 import { PersistError, type BlobStore, type ShareResult } from './types';
@@ -52,15 +52,17 @@ const isHttp = (src: string) => /^https?:\/\//i.test(src);
 
 /** The slot and kind of the part that makes a design biggest, for the message. */
 function largestSource(design: Design): string {
-  const sized = Object.entries(design.sources).map(([slot, s]) => ({ slot, kind: s.kind, size: JSON.stringify(s).length }));
-  sized.sort((a, b) => b.size - a.size);
-  const top = sized[0];
-  return top ? ` Its largest part is the ${top.kind} source of "${top.slot}".` : '';
+  const parts = [
+    ...allSources(design).map(([slot, s]) => ({ what: `the ${s.kind} source of "${slot}"`, size: JSON.stringify(s).length })),
+    ...(design.sequence ? [{ what: 'its animation sequence', size: JSON.stringify(design.sequence).length }] : []),
+  ];
+  parts.sort((a, b) => b.size - a.size);
+  return parts[0] ? ` Its largest part is ${parts[0].what}.` : '';
 }
 
 /** The first source that only exists in this browser, if any. */
 function localImage(design: Design, blobs: BlobStore) {
-  return Object.entries(design.sources).find(([, s]) => s.kind === 'image' && !isHttp(s.src) && blobs.isRef(s.src));
+  return allSources(design).find(([, s]) => s.kind === 'image' && !isHttp(s.src) && blobs.isRef(s.src));
 }
 
 /** A link to the design, or the reason there cannot be one. */

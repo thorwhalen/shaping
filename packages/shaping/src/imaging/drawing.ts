@@ -138,5 +138,6 @@ export function drawingToFigure(drawing: DrawingSource, ctx: ImagingContext): Fi
   if (components.length === 0) throw new Error('The drawing is empty: nothing is left to shape (an eraser may have removed everything).');
   const areaOf = (ps: Polygon[]) => ps.reduce((s, p) => s + polygonArea(p), 0);
   components.sort((a, b) => areaOf(b) - areaOf(a));
-  return { units: 'unit', parts: components.map((polygons, i) => ({ id: partId(i), polygons })) };
+  // The page is the frame: what is drawn keeps its size and place on it.
+  return { units: 'unit', frame: { min: [0, 0], max: [drawing.width, drawing.height] }, parts: components.map((polygons, i) => ({ id: partId(i), polygons })) };
 }

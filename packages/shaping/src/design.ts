@@ -15,8 +15,10 @@ import { z } from 'zod';
  * so saved work, shared links and files keep meaning what they meant.
  * - 2 (2026-09-29): a text source's `round` became a share of the stroke's half-width (was a radius
  *   in cells) and rounds concave corners too.
+ * - 3 (2026-09-30): drawings, images and SVGs are fitted by their page (`prepare.fit: 'frame'`);
+ *   older documents keep fitting their content, so they build exactly as before.
  */
-export const DESIGN_VERSION = 2 as const;
+export const DESIGN_VERSION = 3 as const;
 
 const vec2 = z.tuple([z.number(), z.number()]);
 const ring = z.array(vec2);
@@ -110,6 +112,8 @@ export const SourceSchema = z.discriminatedUnion('kind', [
 // ---------------------------------------------------------------- preparation (source -> figure)
 
 export const PrepareSchema = z.object({
+  /** What is fitted to the object: the page it was drawn on (keeps size and place), or just the shape drawn. */
+  fit: z.enum(['frame', 'content']).default('frame').meta({ title: 'Fit' }),
   /** How the mask is extracted from a raster image. */
   mode: z.enum(['auto', 'alpha', 'luminance', 'color', 'adaptive']).default('auto').meta({ title: 'Mask mode' }),
   /** Luminance threshold 0-255; null means "use Otsu's value". */
@@ -162,11 +166,23 @@ export const ViewSchema = z.object({
   azimuthDeg: z.number().min(-360).max(720).default(35).meta({ render: true, title: 'Azimuth', unit: '°' }),
   elevationDeg: z.number().min(-89).max(89).default(25).meta({ render: true, title: 'Elevation', unit: '°' }),
   /** Show the diagnostic walls (shadows) the genre provides. */
-  walls: z.boolean().default(true).meta({ render: true, title: 'Shadow walls' }),
+  /**
+   * The walls around the object: none; the shadow walls (a panel behind each view); a corner (three
+   * big walls meeting at the edges); or a closed box of six (four walls, a floor and a ceiling).
+   * Walls between the camera and the object are cut away.
+   */
+  room: z.enum(['none', 'shadow', 'corner', 'box']).default('shadow').meta({ render: true, title: 'Walls' }),
+  /** Size of the shadow-wall panels, as a multiple of what just frames their shadow. */
+  wallSize: z.number().min(1).max(4).default(1.3).meta({ render: true, title: 'Wall size', step: 0.05, when: { room: ['shadow'] } }),
+  /**
+   * The light: the movable sun; three lights, one along each view's axis, each casting its view's
+   * shadow on its own wall (parallel light from infinitely far away); or off (fill light only).
+   */
+  light: z.enum(['sun', 'axes', 'off']).default('sun').meta({ render: true, title: 'Light' }),
   // ---- the rest of the camera pose (with azimuthDeg and elevationDeg above), in units of the framed
   // radius, so a pose means the same framing whatever the object's size. Screen and export read it.
   /** Camera distance from the orbit target, in framed radii (perspective); dolly changes it. */
-  distance: z.number().min(1.05).max(200).default(4).meta({ render: true, title: 'Distance', step: 0.05 }),
+  distance: z.number().min(0.05).max(200).default(4).meta({ render: true, title: 'Distance', step: 0.05 }),
   /** Pan: the orbit target's offset from the object's centre, in framed radii (scene x, y, z). */
   panX: z.number().min(-20).max(20).default(0).meta({ render: true, title: 'Pan x', step: 0.01 }),
   panY: z.number().min(-20).max(20).default(0).meta({ render: true, title: 'Pan y', step: 0.01 }),
@@ -176,7 +192,7 @@ export const ViewSchema = z.object({
   /** Zoom of the orthographic camera (1 frames the object). */
   zoom: z.number().min(0.05).max(50).default(1).meta({ render: true, title: 'Zoom', step: 0.01 }),
   /** Distance of the shadow walls from the object, as a share of its size. */
-  wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { walls: [true] } }),
+  wallGap: z.number().min(0.05).max(3).default(0.8).meta({ title: 'Wall distance', step: 0.05, when: { room: ['shadow', 'corner', 'box'] } }),
   ground: z.boolean().default(true).meta({ render: true, title: 'Ground shadow' }),
   /** Light direction: azimuth and elevation in degrees, and intensity. */
   lightAzimuthDeg: z.number().min(-180).max(180).default(45).meta({ render: true, title: 'Light azimuth', unit: '°' }),
@@ -239,6 +255,13 @@ export const DesignObjectSchema = z.object({
   prepare: z.record(z.string(), PrepareSchema.partial()).default({}),
   /** The genre's parameters, validated by the genre's own schema. */
   params: z.record(z.string(), z.unknown()).default({}),
+  /**
+   * The work left in other genres: switching genre stores the current genre's sources, preparation
+   * and parameters here and brings back the target genre's, so switching away and back loses nothing.
+   */
+  genreState: z
+    .record(z.string(), z.object({ sources: z.record(z.string(), SourceSchema), prepare: z.record(z.string(), PrepareSchema.partial()).default({}), params: z.record(z.string(), z.unknown()).default({}) }))
+    .optional(),
   /** Size of the longest edge of the finished object. */
   sizeMm: z.number().positive().max(2000).default(50).meta({ title: 'Size (longest edge)', unit: 'mm' }),
   style: StyleSchema.default(StyleSchema.parse({})),
@@ -265,14 +288,57 @@ export type Style = z.infer<typeof StyleSchema>;
 export type View = z.infer<typeof ViewSchema>;
 export type FlatAction = z.infer<typeof FlatActionSchema>;
 export type Animation = z.infer<typeof AnimationSchema>;
+/** `view.walls: false` (before rooms existed) means no walls. Additive: no version change. */
+function liftWalls(input: object): object {
+  const view = (input as { view?: Record<string, unknown> }).view;
+  if (!view || !('walls' in view)) return input;
+  const { walls, ...rest } = view;
+  const lifted = { ...input, view: { ...rest, room: rest.room ?? (walls === false ? 'none' : 'shadow') } };
+  return liftSequenceWalls(lifted);
+}
+
+/** The same, for views stored in an animation's keyframes (where `walls` may also appear). */
+function liftSequenceWalls(input: object): object {
+  const seq = (input as { sequence?: { keyframes?: Array<{ state?: { view?: Record<string, unknown> } }> } }).sequence;
+  if (!seq?.keyframes) return input;
+  const keyframes = seq.keyframes.map((k) => {
+    const v = k.state?.view;
+    if (!v || !('walls' in v)) return k;
+    const { walls, ...rest } = v;
+    return { ...k, state: { ...k.state, view: { ...rest, room: rest.room ?? (walls === false ? 'none' : 'shadow') } } };
+  });
+  return { ...input, sequence: { ...seq, keyframes } };
+}
+
 /** In version 1 a block-text `round` was a radius in cells (0..0.5); it is now a share of the half-stroke. */
 const V1_ROUND_TO_V2 = 1 / (0.5 * 0.98);
 
 /** Bring an older Design document up to the current version. Unknown shapes pass through to validation. */
 export function migrateDesign(input: unknown): unknown {
   if (!input || typeof input !== 'object') return input;
-  const d = input as { version?: unknown; sources?: Record<string, { kind?: string; round?: number }> };
-  if (d.version !== 1) return input;
+  let d = liftWalls(input) as { version?: unknown; sources?: Record<string, { kind?: string; round?: number }> };
+  if (d.version === 1) d = v1ToV2(d) as typeof d;
+  if (d.version === 2) d = v2ToV3(d) as typeof d;
+  return d;
+}
+
+/** Source kinds that carry a page (a frame) since version 3. */
+const FRAMED_KINDS = ['drawing', 'image', 'svg'];
+
+/** Version 2 fitted every figure by its content: keep that for the framed kinds, in every genre. */
+function v2ToV3(input: object): object {
+  type Kept = { sources?: Record<string, { kind?: string }>; prepare?: Record<string, Record<string, unknown>> };
+  const pin = (g: Kept): Kept => {
+    const prepare = { ...(g.prepare ?? {}) };
+    for (const [slot, s] of Object.entries(g.sources ?? {})) if (s && FRAMED_KINDS.includes(s.kind ?? '')) prepare[slot] = { fit: 'content', ...(prepare[slot] ?? {}) };
+    return { ...g, prepare };
+  };
+  const d = input as Kept & { genreState?: Record<string, Kept> };
+  const genreState = d.genreState ? Object.fromEntries(Object.entries(d.genreState).map(([k, g]) => [k, pin(g)])) : undefined;
+  return { ...pin(d), ...(genreState ? { genreState } : {}), version: 3 };
+}
+
+function v1ToV2(d: { version?: unknown; sources?: Record<string, { kind?: string; round?: number }> }): object {
   const sources = Object.fromEntries(
     Object.entries(d.sources ?? {}).map(([k, src]) =>
       src?.kind === 'text' && typeof src.round === 'number' ? [k, { ...src, round: Math.min(1, src.round * V1_ROUND_TO_V2) }] : [k, src],

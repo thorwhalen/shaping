@@ -8,7 +8,7 @@ beforeAll(async () => {
 });
 
 const example = (name: string) => JSON.parse(readFileSync(new URL(`../../../../examples/${name}.json`, import.meta.url), 'utf8'));
-const design = (genre: string, sources: object, params: object = {}) => ({ version: 1, id: 't', genre, sources, params });
+const design = (genre: string, sources: object, params: object = {}) => ({ version: 3, id: 't', genre, sources, params });
 const shape = (shape: string, extra: object = {}) => ({ kind: 'shape', shape, ...extra });
 
 describe('shadow blocks', () => {
@@ -162,7 +162,7 @@ describe('design migration', () => {
     const { parseDesign } = await import('../index.js');
     const v1 = { version: 1, id: 'm', genre: 'turned', sources: { figure: { kind: 'text', text: 'KO', round: 0.2 } } };
     const d = parseDesign(v1);
-    expect(d.version).toBe(2);
+    expect(d.version).toBe(3);
     expect((d.sources.figure as { round: number }).round).toBeCloseTo(0.2 / 0.49, 6);
     const again = parseDesign(d);
     expect(again).toEqual(d);
@@ -178,5 +178,86 @@ describe('recolor', () => {
     const rebuilt = await build({ ...d, style }, { kernel });
     expect(recolor(base, style).bodies.map((b) => b.color)).toEqual(rebuilt.bodies.map((b) => b.color));
     expect(recolor(base, d.style)).toBe(base);
+  });
+});
+
+describe('frames and blocks', () => {
+  const small = { kind: 'drawing', width: 100, height: 100, objects: [{ tool: 'rect', points: [[0, 0], [20, 20]], size: 1, filled: true, erase: false }] };
+  it('a small shape drawn in a corner stays small and in the corner (the page is the frame)', async () => {
+    const { defaultResolvers } = await import('../imaging/index.js');
+    const m = await build(design('shadow-blocks', { front: small, side: shape('rect'), top: shape('rect') }, { fit: 'stretch' }), { kernel, resolvers: defaultResolvers });
+    const front = m.diagnostics.regions.find((r) => r.id === 'front:target')!;
+    const xs = front.polygons.flatMap((p) => p.outer.map(([x]) => x));
+    const ys = front.polygons.flatMap((p) => p.outer.map(([, y]) => y));
+    const span = Math.max(...xs) - Math.min(...xs);
+    // 20 of 100 drawing units: a fifth of the block's 50 mm, near its top-left corner.
+    expect(span).toBeCloseTo(10, 0);
+    expect(Math.min(...xs)).toBeCloseTo(-25, 0);
+    expect(Math.max(...ys)).toBeCloseTo(25, 0);
+  });
+
+  it('"fit: content" fits the shape itself instead', async () => {
+    const { defaultResolvers } = await import('../imaging/index.js');
+    const d = { ...design('shadow-blocks', { front: small, side: shape('rect'), top: shape('rect') }, { fit: 'stretch' }), prepare: { front: { fit: 'content' } } };
+    const m = await build(d, { kernel, resolvers: defaultResolvers });
+    const xs = m.diagnostics.regions.find((r) => r.id === 'front:target')!.polygons.flatMap((p) => p.outer.map(([x]) => x));
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(50, 0);
+  });
+
+  it('box, cylinder and sphere blocks build with their proportions; slot frames follow them', async () => {
+    const { shadowBlocks } = await import('../index.js');
+    for (const blockShape of ['box', 'cylinder', 'sphere']) {
+      const block = { shape: blockShape, width: 2, depth: 1, height: 1 };
+      const m = await build(design('shadow-blocks', { front: shape('rect'), side: shape('rect'), top: shape('rect') }, { fit: 'stretch', block }), { kernel });
+      const e = [0, 1, 2].map((i) => m.diagnostics.bbox.max[i] - m.diagnostics.bbox.min[i]);
+      expect(e[0] / e[1], blockShape).toBeCloseTo(2, 1);
+      expect(m.diagnostics.pieces, blockShape).toBe(1);
+    }
+    const params = shadowBlocks.params.parse({ block: { width: 2, depth: 1, height: 1 } });
+    expect(shadowBlocks.slotFrame!(params, 'front')).toEqual([2, 1]);
+    expect(shadowBlocks.slotFrame!(params, 'side')).toEqual([1, 1]);
+  });
+});
+
+describe('switching genre', () => {
+  it('switching away and back restores sources, preparation and dials', async () => {
+    const { parseDesign, switchGenre, builtInGenres } = await import('../index.js');
+    const d0 = parseDesign({ ...design('shadow-blocks', { front: { kind: 'text', text: 'X' }, side: shape('star'), top: shape('heart') }, { thicken: 0.1, frame: 'border' }), prepare: { front: { fit: 'content' } } });
+    const turned = switchGenre(d0, 'turned', builtInGenres);
+    expect(turned.genre).toBe('turned');
+    const back = switchGenre(turned, 'shadow-blocks', builtInGenres);
+    expect(back.sources).toEqual(d0.sources);
+    expect(back.params).toEqual(d0.params);
+    expect(back.prepare).toEqual(d0.prepare);
+    expect(parseDesign(back).genreState?.turned).toBeDefined();
+  });
+});
+
+describe('design version 3', () => {
+  it('older designs keep fitting drawings, images and SVGs by their content, in every genre', async () => {
+    const { parseDesign } = await import('../index.js');
+    const v2 = {
+      version: 2, id: 'o', genre: 'turned',
+      sources: { figure: { kind: 'drawing', width: 100, height: 100, objects: [] } },
+      genreState: { 'shadow-blocks': { sources: { front: { kind: 'svg', svg: '<svg/>' }, side: { kind: 'shape', shape: 'circle' }, top: { kind: 'image', src: 'data:,' } } } },
+      view: { walls: false },
+      sequence: { keyframes: [{ id: 'a', state: { view: { walls: false } } }] },
+    };
+    const d = parseDesign(v2);
+    expect(d.version).toBe(3);
+    expect(d.prepare.figure?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.front?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.top?.fit).toBe('content');
+    expect(d.genreState!['shadow-blocks'].prepare.side).toBeUndefined();
+    expect(d.view.room).toBe('none');
+    expect((d.sequence as { keyframes: Array<{ state: { view: { room: string } } }> }).keyframes[0].state.view.room).toBe('none');
+  });
+});
+
+describe('round blocks', () => {
+  it('a sphere of three squares, with a frame and thickening, casts everything it is asked to', async () => {
+    const block = { shape: 'sphere', width: 1, depth: 1, height: 1 };
+    const m = await build(design('shadow-blocks', { front: shape('rect'), side: shape('rect'), top: shape('rect') }, { fit: 'stretch', block, frame: 'border', thicken: 0.1 }), { kernel });
+    for (const s of m.diagnostics.shadows!) expect(s.missingShare, s.slot).toBeLessThan(0.01);
   });
 });

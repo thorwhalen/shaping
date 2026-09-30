@@ -40,7 +40,33 @@ const defaultPlacement = PlacementSchema.parse({});
 /** Every way to assign the three sources to the three views: the source for front, side, top. */
 export const ASSIGNMENTS = ['front,side,top', 'front,top,side', 'side,front,top', 'side,top,front', 'top,front,side', 'top,side,front'] as const;
 
+/** The block the three shadows are carved from: its shape and relative proportions. */
+export const BlockSchema = z.object({
+  shape: z.enum(['box', 'cylinder', 'sphere']).default('box').meta({ title: 'Block' }),
+  width: z.number().min(0.2).max(5).default(1).meta({ title: 'Width (x)', step: 0.05 }),
+  depth: z.number().min(0.2).max(5).default(1).meta({ title: 'Depth (y)', step: 0.05 }),
+  height: z.number().min(0.2).max(5).default(1).meta({ title: 'Height (z)', step: 0.05 }),
+});
+export type Block = z.output<typeof BlockSchema>;
+const defaultBlock = BlockSchema.parse({});
+
+/** Segments of the ellipse that bounds a cylinder or sphere block. */
+const ROUND_BLOCK_SEGMENTS = 96;
+
+/** Half extents of the block along x, y and z; the longest is 1, so a cube spans -1..1. */
+export function blockHalfExtents(b: Block): [number, number, number] {
+  const m = Math.max(b.width, b.depth, b.height);
+  return [b.width / m, b.depth / m, b.height / m];
+}
+
+/** Each view's rectangle as half extents (u, v): front (x, z), side (y, z), top (x, y). */
+function viewHalf(b: Block, view: SlotId): [number, number] {
+  const [hx, hy, hz] = blockHalfExtents(b);
+  return view === 'front' ? [hx, hz] : view === 'side' ? [hy, hz] : [hx, hy];
+}
+
 export const ShadowParams = z.object({
+  block: BlockSchema.default(defaultBlock),
   /** Fit each figure into the same square, keeping its proportions (contain) or filling it (stretch). */
   fit: z.enum(['contain', 'stretch']).default('contain').meta({ title: 'Fit' }),
   /** Which source goes to which view. "side,front,top" puts the side source on the front view, and so on. */
@@ -66,10 +92,52 @@ function placeRegion(k: Kernel, r: Region, p: Placement): Region {
   return k.transform2(r, { mirrorX: p.mirror, rotateDeg: Number(p.rotate), scale: p.scale, translate: [p.offsetU, p.offsetV] });
 }
 
-function frameRegion(k: Kernel, kind: 'border' | 'base-bar', w: number): Region {
-  const o = 1 + w;
-  if (kind === 'base-bar') return k.region([{ outer: [[-o, -o], [o, -o], [o, -1], [-o, -1]], holes: [] }]);
-  return k.region([{ outer: [[-o, -o], [o, -o], [o, o], [-o, o]], holes: [[[-1, -1], [-1, 1], [1, 1], [1, -1]]] }]);
+/** Whether a view of the block is round (an ellipse) rather than a rectangle. */
+function roundView(b: Block, view: SlotId): boolean {
+  return b.shape === 'sphere' || (b.shape === 'cylinder' && view === 'top');
+}
+
+/** The block's outline in a view: a rectangle, or an ellipse for the round faces. */
+function outline(round: boolean, hu: number, hv: number) {
+  if (!round) return [[-hu, -hv], [hu, -hv], [hu, hv], [-hu, hv]] as [number, number][];
+  return Array.from({ length: ROUND_BLOCK_SEGMENTS }, (_, i): [number, number] => {
+    const a = (2 * Math.PI * i) / ROUND_BLOCK_SEGMENTS;
+    return [hu * Math.cos(a), hv * Math.sin(a)];
+  });
+}
+
+/**
+ * A border that follows the block's outline in this view (width w), or a bar along its bottom
+ * (clipped to the outline), so the frame always lies within the block.
+ */
+function frameRegion(k: Kernel, kind: 'border' | 'base-bar', w: number, hu: number, hv: number, round: boolean): Region {
+  const outer = k.region([{ outer: outline(round, hu + w, hv + w), holes: [] }]);
+  const inner = k.region([{ outer: outline(round, hu, hv), holes: [] }]);
+  if (kind === 'border') return k.subtract2(outer, inner);
+  const ou = hu + w, ov = hv + w;
+  // Under a rectangle the bar sits just below it; under an ellipse it reaches in by w, or it would be a sliver.
+  const top = round ? -hv + w : -hv;
+  const bar = k.region([{ outer: [[-ou, -ov], [ou, -ov], [ou, top], [-ou, top]], holes: [] }]);
+  return k.intersect2(bar, outer);
+}
+
+/** The block's own solid, for shapes that cut more than the three extrusions do. */
+function blockSolid(k: Kernel, b: Block, margin: number): Solid | null {
+  if (b.shape === 'box') return null;
+  const [hx, hy, hz] = blockHalfExtents(b);
+  if (b.shape === 'cylinder') {
+    const ellipse = Array.from({ length: ROUND_BLOCK_SEGMENTS }, (_, i): [number, number] => {
+      const a = (2 * Math.PI * i) / ROUND_BLOCK_SEGMENTS;
+      return [(hx + margin) * Math.cos(a), (hy + margin) * Math.sin(a)];
+    });
+    return k.extrude(k.region([{ outer: ellipse, holes: [] }]), 2 * (hz + margin), { center: true });
+  }
+  // An ellipsoid: a unit sphere (a revolved half disc), scaled to the half extents.
+  const half = Array.from({ length: ROUND_BLOCK_SEGMENTS / 2 + 1 }, (_, i): [number, number] => {
+    const a = -Math.PI / 2 + (Math.PI * i) / (ROUND_BLOCK_SEGMENTS / 2);
+    return [Math.max(0, Math.cos(a)), Math.sin(a)];
+  });
+  return k.scale(k.revolve(k.region([{ outer: half, holes: [] }]), { segments: ROUND_BLOCK_SEGMENTS }), [hx + margin, hy + margin, hz + margin]);
 }
 
 export const shadowBlocks = defineGenre({
@@ -87,17 +155,28 @@ export const shadowBlocks = defineGenre({
     { id: 'top', title: 'Top shadow', hint: 'Seen from above, on the floor.' },
   ],
   params: ShadowParams,
+  slotFrame(params, slot) {
+    // A slot's figure is shown on the view the assignment gives it.
+    const view = SLOT_IDS[(params.assign.split(',') as SlotId[]).indexOf(slot as SlotId)] ?? (slot as SlotId);
+    const [hu, hv] = viewHalf(params.block, view);
+    return [2 * hu, 2 * hv];
+  },
   build(figures, params, { kernel: k }) {
     const order = params.assign.split(',') as SlotId[];
+    // How far the figures may reach beyond the block's outline: the frame and the thickening.
+    const margin = (params.frame !== 'none' ? params.frameWidth : 0) + params.thicken;
     const warnings: string[] = [];
     const regions = {} as Record<SlotId, Region>;
     const components = {} as Record<SlotId, number>;
     SLOT_IDS.forEach((view, i) => {
       const src: Figure = figures[order[i]];
-      let r = k.region(fitFigure(src, 2, params.fit).parts.flatMap((p) => p.polygons));
+      const [hu, hv] = viewHalf(params.block, view);
+      let r = k.region(fitFigure(src, [2 * hu, 2 * hv], params.fit).parts.flatMap((p) => p.polygons));
       r = placeRegion(k, r, params.placement[view]);
-      if (params.frame !== 'none') r = k.union2([r, frameRegion(k, params.frame, params.frameWidth)]);
+      if (params.frame !== 'none') r = k.union2([r, frameRegion(k, params.frame, params.frameWidth, hu, hv, roundView(params.block, view))]);
       if (params.thicken > 0) r = k.offset2(r, params.thicken, 'round');
+      // A round face (an ellipse) can only cast what lies inside its outline: the rest is not asked for.
+      if (roundView(params.block, view)) r = k.intersect2(r, k.region([{ outer: outline(true, hu + margin, hv + margin), holes: [] }]));
       regions[view] = r;
       components[view] = k.components2(r).length;
     });
@@ -110,7 +189,11 @@ export const shadowBlocks = defineGenre({
     const length = 2 * reach * 1.1;
     const prisms = SLOT_IDS.map((v) => k.transform(k.extrude(regions[v], length, { center: true }), invertRigid(VIEWS[v])));
     let solid: Solid = k.intersect(prisms);
+    const shape = blockSolid(k, params.block, margin);
+    if (shape) solid = k.intersect([solid, shape]);
 
+    if (k.isEmpty(solid))
+      warnings.push('No point lies in all three shadows: the figures do not overlap in space. Move or scale a figure (Placement), draw larger, or set Fit to "content".');
     // Pieces: drop dust, or keep the largest only.
     const pieces = k.decompose(solid);
     if (pieces.length > 1) {

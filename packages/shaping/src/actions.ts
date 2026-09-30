@@ -43,10 +43,49 @@ export const setSource = (d: Design, slot: string, source: Source): Design => ({
 /** Set one preparation parameter of a slot. */
 export const setPrepare = (d: Design, slot: string, key: string, value: unknown): Design => ({ ...d, prepare: { ...d.prepare, [slot]: { ...(d.prepare[slot] ?? {}), [key]: value } } });
 
-/** Switch to another genre: sources are kept for slots with the same id, others get starters. */
+/**
+ * Switch to another genre, losing nothing: the current genre's sources, preparation and parameters
+ * are kept in `genreState`, and the target genre's come back from there if it was used before (else
+ * slots with the same id keep their source, and the others get starters).
+ */
 export function switchGenre(d: Design, genreId: string, genres: GenreTable): Design {
+  if (genreId === d.genre) return d;
   const fresh = newDesign(genreId, genres, { id: d.id, title: d.title });
-  const sources = Object.fromEntries(Object.entries(fresh.sources).map(([slot, s]) => [slot, d.sources[slot] ?? s]));
-  // The sequence stays: its views keep their camera and light; dials of the old genre are dropped when shown.
-  return { ...fresh, sources, style: d.style, view: d.view, sizeMm: d.sizeMm, ...(d.sequence ? { sequence: d.sequence } : {}) };
+  const kept = { ...(d.genreState ?? {}), [d.genre]: { sources: d.sources, prepare: d.prepare, params: d.params } };
+  const back = kept[genreId];
+  const sources = back ? back.sources : Object.fromEntries(Object.entries(fresh.sources).map(([slot, s]) => [slot, d.sources[slot] ?? s]));
+  const { [genreId]: _restored, ...others } = kept;
+  void _restored;
+  // The sequence stays: its views keep their camera and light; dials of another genre are dropped when shown.
+  return {
+    ...fresh,
+    sources,
+    prepare: back ? back.prepare : {},
+    params: back ? back.params : fresh.params,
+    genreState: { ...others, [d.genre]: kept[d.genre] },
+    style: d.style,
+    view: d.view,
+    sizeMm: d.sizeMm,
+    ...(d.sequence ? { sequence: d.sequence } : {}),
+  };
+}
+
+/**
+ * Every source a design holds: its own, and those kept for other genres (`genreState`), each with a
+ * path naming where it is ("figure", "shadow-blocks/front"). Anything that inspects or rewrites
+ * sources (images to embed, remote images to hold, a link's size) must go through these two.
+ */
+export function allSources(d: Design): Array<[string, Source]> {
+  const kept = Object.entries(d.genreState ?? {}).flatMap(([genre, g]) => Object.entries(g.sources).map(([slot, s]): [string, Source] => [`${genre}/${slot}`, s]));
+  return [...Object.entries(d.sources), ...kept];
+}
+
+/** Rewrite every source a design holds (its own and those kept for other genres). */
+export function mapSources(d: Design, fn: (s: Source) => Source): Design {
+  const map = (ss: Record<string, Source>) => Object.fromEntries(Object.entries(ss).map(([k, s]) => [k, fn(s)]));
+  return {
+    ...d,
+    sources: map(d.sources),
+    ...(d.genreState ? { genreState: Object.fromEntries(Object.entries(d.genreState).map(([g, st]) => [g, { ...st, sources: map(st.sources) }])) } : {}),
+  };
 }

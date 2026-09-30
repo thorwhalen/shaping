@@ -5,6 +5,8 @@
  * turning a genre dial never re-traces an image.
  */
 import { produce } from 'immer';
+import { flushPose } from '../viewer/Viewer';
+import { emptyHistory, record, redo, undo, type History } from './history';
 import { buildKey, prepareParams, type Design, type Figure, type Model } from 'shaping';
 import { genres } from '../genres';
 import { create } from 'zustand';
@@ -41,8 +43,13 @@ export interface AppState {
   /** Change the open design with a function `(design) => design` (the shape of every user action). */
   update(fn: (d: Design) => Design): void;
   /** Change the open design in place with an immer recipe. */
-  edit(recipe: (d: Design) => void): void;
+  edit(recipe: (d: Design) => void, kind?: string): void;
   setActiveSlot(slot: string): void;
+  /** Undo and redo (every change to the design, grouped by pauses). */
+  undo(): void;
+  redo(): void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const figureKey = (d: Design, slot: string) => JSON.stringify([d.sources[slot], prepareParams(d, slot)]);
@@ -133,6 +140,16 @@ export const useApp = create<AppState>()((set, get) => {
     }
   }
 
+  let history: History<Design> = emptyHistory();
+
+  /** Replace the design, remembering the old one for undo. */
+  function commit(before: Design, after: Design, kind = 'edit') {
+    if (after === before) return;
+    history = record(history, before, Date.now(), kind);
+    set({ design: after, canUndo: true, canRedo: false });
+    changed();
+  }
+
   function changed() {
     void refresh();
     const d = get().design;
@@ -157,24 +174,43 @@ export const useApp = create<AppState>()((set, get) => {
       const slot = design ? (genres[design.genre]?.slots[0]?.id ?? '') : '';
       builtKey = '';
       buildingKey = '';
+      history = emptyHistory();
       // Anything still running for the previous design is now older than what is on screen.
       appliedSeq = ++refreshSeq;
       clearTimeout(busyTimer);
-      set({ design, model: null, modelKey: '', figures: {}, masks: {}, error: null, stale: false, busy: false, activeSlot: slot });
+      set({ design, model: null, modelKey: '', figures: {}, masks: {}, error: null, stale: false, busy: false, activeSlot: slot, canUndo: false, canRedo: false });
       if (design) changed();
     },
     update(fn) {
       const d = get().design;
       if (!d) return;
-      set({ design: fn(d) });
-      changed();
+      commit(d, fn(d));
     },
-    edit(recipe) {
+    edit(recipe, kind) {
       const d = get().design;
       if (!d) return;
-      set({ design: produce(d, recipe) });
+      commit(d, produce(d, recipe), kind);
+    },
+    undo() {
+      flushPose.current(); // an orbit still settling is part of what is undone
+      const d = get().design;
+      const r = d && undo(history, d);
+      if (!r) return;
+      history = r.history;
+      set({ design: r.value, canUndo: history.past.length > 0, canRedo: history.future.length > 0 });
       changed();
     },
+    redo() {
+      flushPose.current();
+      const d = get().design;
+      const r = d && redo(history, d);
+      if (!r) return;
+      history = r.history;
+      set({ design: r.value, canUndo: history.past.length > 0, canRedo: history.future.length > 0 });
+      changed();
+    },
+    canUndo: false,
+    canRedo: false,
     setActiveSlot: (slot) => set({ activeSlot: slot }),
   };
 });

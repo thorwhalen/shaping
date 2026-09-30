@@ -5,6 +5,7 @@
  */
 import { ViewSchema, type Box3, type Model, type View } from 'shaping';
 import { z } from 'zod';
+import { roomBox } from './room';
 
 /** Half the height the orthographic camera shows at zoom 1, in framed radii. */
 export const ORTHO_HALF_HEIGHT_RADII = 1.6;
@@ -119,7 +120,9 @@ export function framingBox(model: Model, view: View): Box3 {
   const b = model.diagnostics.bbox;
   const min = [...b.min] as [number, number, number];
   const max = [...b.max] as [number, number, number];
-  if (!view.walls) return { min, max };
+  if (view.room === 'none') return { min, max };
+  // A corner or a box room: frame the whole room.
+  if (view.room === 'corner' || view.room === 'box') return roomBox(model, view);
   for (const r of model.diagnostics.regions) {
     if (r.role !== 'target') continue;
     for (const p of r.polygons)

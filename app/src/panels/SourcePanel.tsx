@@ -34,6 +34,18 @@ const STARTERS: Record<Kind, Source | null> = {
   polygons: null,
 };
 
+/** Longest side of a new drawing page, in drawing units. */
+const PAGE_SIZE = 512;
+/** Page proportions closer than this to the block's count as matching. */
+const ASPECT_TOLERANCE = 0.01;
+
+/** A blank drawing page with the given width : height (square without one). */
+function pageFor(aspect: number | undefined): Source {
+  const a = aspect ?? 1;
+  const [width, height] = a >= 1 ? [PAGE_SIZE, PAGE_SIZE / a] : [PAGE_SIZE * a, PAGE_SIZE];
+  return DrawingSourceSchema.parse({ kind: 'drawing', width, height });
+}
+
 /** Pixels of the working image that one millimetre of the finished object covers, roughly. */
 function pxPerMm(design: Design, preview: MaskPreview | null) {
   return preview ? Math.max(preview.width, preview.height) / design.sizeMm : 1;
@@ -53,7 +65,8 @@ export function SourcePanel({ profileId }: { profileId: string }) {
   const choose = (kind: Kind) => {
     if (kind === source.kind) return;
     setStash((s) => ({ ...s, [slot.id]: { ...s[slot.id], [source.kind]: source } }));
-    const next = stash[slot.id]?.[kind] ?? STARTERS[kind];
+    const starter = kind === 'drawing' ? pageFor(slotAspect) : STARTERS[kind];
+    const next = stash[slot.id]?.[kind] ?? starter;
     if (next) update((d) => setSource(d, slot.id, next));
     else fileInput.current?.click();
     pendingKind.current = kind;
@@ -72,6 +85,12 @@ export function SourcePanel({ profileId }: { profileId: string }) {
     update((d) => setSource(d, slot.id, { kind: 'image', src, name: file.name }));
   }
 
+  // The proportions this slot's figure is fitted into (e.g. one face of a shadow block), if the genre says.
+  const slotAspect = (() => {
+    const parsed = genre.params.safeParse(design.params);
+    const f = parsed.success ? genre.slotFrame?.(parsed.data, slot.id) : undefined;
+    return f ? f[0] / f[1] : undefined;
+  })();
   const figureError = figures[slot.id]?.error;
   const parts = figures[slot.id]?.figure?.parts.length;
 
@@ -134,7 +153,18 @@ export function SourcePanel({ profileId }: { profileId: string }) {
       )}
 
       {source.kind === 'drawing' && (
-        <DrawingCanvas value={source} onChange={(next) => update((d) => setSource(d, slot.id, next))} className="w-full" />
+        <>
+          {slotAspect && Math.abs(source.width / source.height - slotAspect) > ASPECT_TOLERANCE && (
+            <p className="flex items-center justify-between gap-2 rounded border border-line bg-white px-2 py-1 text-xs text-muted">
+              The page's proportions differ from this view of the block.
+              <button className="shrink-0 underline hover:text-ink" onClick={() => update((d) => setSource(d, slot.id, { ...source, width: source.height * slotAspect }))}>
+                Match the block
+              </button>
+            </p>
+          )}
+          <DrawingCanvas value={source} onChange={(next) => update((d) => setSource(d, slot.id, next))} className="w-full" />
+          <p className="text-xs text-muted">The page is the frame of this view: what you draw keeps its size and place on it.</p>
+        </>
       )}
 
       <p className={`text-xs ${figureError ? 'text-red-700' : 'text-muted'}`} aria-live="polite">

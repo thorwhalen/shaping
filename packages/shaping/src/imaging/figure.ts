@@ -71,7 +71,8 @@ export function maskToFigure(mask: Mask, prepare: PrepareParams, ctx: ImagingCon
   if (parts.length === 0) throw new Error(`${EMPTY_MASK_HELP} (Tracing found no contour: check "Thicken" and "Smooth".)`);
   const areaOf = (p: Omit<Part, 'id'>) => p.polygons.reduce((s, g) => s + polygonArea(g), 0);
   parts.sort((a, b) => areaOf(b) - areaOf(a));
-  return { units: 'px', parts: parts.map((p, i) => ({ id: partId(i), ...p })) };
+  // The image is the frame (y up, as traced).
+  return { units: 'px', frame: { min: [0, 0], max: [cleaned.width, cleaned.height] }, parts: parts.map((p, i) => ({ id: partId(i), ...p })) };
 }
 
 /** Parts = connected components of the traced, unioned shape (so grown shapes that merge become one part). */

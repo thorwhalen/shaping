@@ -139,8 +139,11 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
   };
 
   // Zoom limits from the object's size on screen: never smaller than MIN_OBJECT_PX, never inside it.
-  const maxDistance = Math.min(POSE_BOUNDS.distance.max * r, (r * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180)));
-  const minZoom = Math.max(POSE_BOUNDS.zoom.min, (MIN_OBJECT_PX / size.height) * (spec.halfHeight / r));
+  // Limits come from the object itself, not the framed room: you can always come close to it, and it
+  // never shrinks below MIN_OBJECT_PX.
+  const ro = modelRadius(model.diagnostics.bbox);
+  const maxDistance = Math.min(POSE_BOUNDS.distance.max * r, (ro * size.height) / (MIN_OBJECT_PX * Math.tan(((spec.fovDeg / 2) * Math.PI) / 180)));
+  const minZoom = Math.max(POSE_BOUNDS.zoom.min, (MIN_OBJECT_PX / size.height) * (spec.halfHeight / ro));
   // Polar angle is measured from straight up: elevation e is polar 90° - e.
   const minPolar = ((90 - POSE_BOUNDS.elevationDeg.max) * Math.PI) / 180;
   const maxPolar = ((90 - POSE_BOUNDS.elevationDeg.min) * Math.PI) / 180;
@@ -150,7 +153,7 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
       makeDefault
       enableDamping
       dampingFactor={0.12}
-      minDistance={r * MIN_DISTANCE_RADII}
+      minDistance={ro * MIN_DISTANCE_RADII}
       maxDistance={maxDistance}
       minZoom={minZoom}
       maxZoom={POSE_BOUNDS.zoom.max}
@@ -173,6 +176,8 @@ function CameraRig({ design, model, resetKey, onPose }: { design: Design; model:
 
 function Capture() {
   const { gl, scene } = useThree();
+  // Development only: let the browser checks inspect the scene.
+  if (import.meta.env.DEV) (window as unknown as { __scene?: unknown }).__scene = scene;
   useEffect(() => {
     captureRef.current = async ({ design, model, width, height, transparent }) => {
       frameOverride.set?.({ design, model });

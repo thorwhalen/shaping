@@ -44,6 +44,12 @@ export interface Part {
 export interface Figure {
   units: Units;
   parts: Part[];
+  /**
+   * The rectangle the figure was drawn in (a drawing's page, an image's pixels, an SVG's view box),
+   * y up. When present, genres fit this frame, not the parts' bounding box, so a small shape drawn
+   * in a corner stays small and in the corner.
+   */
+  frame?: { min: Vec2; max: Vec2 };
 }
 
 /** One closed solid of the model, as an indexed triangle mesh (outward-facing, counter-clockwise). */

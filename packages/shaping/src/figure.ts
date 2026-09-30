@@ -30,8 +30,10 @@ export function figureBounds(f: Figure): Bounds2 | null {
 /** Apply `p -> p * s + t` to every point of a figure. */
 export function mapFigure(f: Figure, fn: (p: Vec2) => Vec2): Figure {
   const ringMap = (r: Ring): Ring => r.map(fn);
+  const frame = f.frame ? cornersBounds(fn(f.frame.min), fn(f.frame.max)) : undefined;
   return {
     units: f.units,
+    ...(frame ? { frame } : {}),
     parts: f.parts.map((part) => ({
       ...part,
       polygons: part.polygons.map((pg) => ({ outer: ringMap(pg.outer), holes: pg.holes.map(ringMap) })),
@@ -39,20 +41,28 @@ export function mapFigure(f: Figure, fn: (p: Vec2) => Vec2): Figure {
   };
 }
 
+const cornersBounds = (a: Vec2, b: Vec2): Bounds2 => ({ min: [Math.min(a[0], b[0]), Math.min(a[1], b[1])], max: [Math.max(a[0], b[0]), Math.max(a[1], b[1])] });
+
+/** What a figure is fitted by: its frame when it has one, else its parts' bounding box. */
+export function fitBounds(f: Figure): Bounds2 | null {
+  return f.frame ?? figureBounds(f);
+}
+
 /**
- * Centre a figure on the origin and scale it so it fits a square of side `size`
- * (`contain`, keeping proportions) or fills it (`stretch`).
+ * Centre a figure's frame (or, without one, its bounding box) on the origin and scale it into a
+ * rectangle of `size` (a number for a square): `contain` keeps proportions, `stretch` fills it.
  */
-export function fitFigure(f: Figure, size = 2, mode: 'contain' | 'stretch' = 'contain'): Figure {
-  const b = figureBounds(f);
+export function fitFigure(f: Figure, size: number | Vec2 = 2, mode: 'contain' | 'stretch' = 'contain'): Figure {
+  const b = fitBounds(f);
   if (!b) return f;
+  const [tw, th] = typeof size === 'number' ? [size, size] : size;
   const w = b.max[0] - b.min[0] || 1;
   const h = b.max[1] - b.min[1] || 1;
   const cx = (b.min[0] + b.max[0]) / 2;
   const cy = (b.min[1] + b.max[1]) / 2;
-  const s = size / Math.max(w, h);
-  const sx = mode === 'stretch' ? size / w : s;
-  const sy = mode === 'stretch' ? size / h : s;
+  const s = Math.min(tw / w, th / h);
+  const sx = mode === 'stretch' ? tw / w : s;
+  const sy = mode === 'stretch' ? th / h : s;
   return { ...mapFigure(f, ([x, y]) => [(x - cx) * sx, (y - cy) * sy]), units: 'unit' };
 }
 
@@ -101,5 +111,5 @@ export function cleanFigure(kernel: Kernel, f: Figure): Figure {
     taken = taken ? kernel.union2([taken, r]) : r;
     parts.push({ ...part, polygons: kernel.polygons(r) });
   }
-  return { units: f.units, parts };
+  return { units: f.units, parts, ...(f.frame ? { frame: f.frame } : {}) };
 }
