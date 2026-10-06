@@ -1,3 +1,6 @@
+# npm auth: trusted publishing (OIDC) only. Never add an NPM_TOKEN secret.
+# npmjs.com -> each package -> Settings -> Trusted Publisher -> GitHub Actions:
+#   owner/repo = thorwhalen/shaping, workflow filename = ci.yml, no environment.
 name: CI
 
 on:
@@ -60,28 +63,37 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - name: Ensure npm >= 11.5.1 (required for OIDC trusted publishing)
+        run: |
+          if ! node -e "const [a,b,c]=process.argv[1].split('.').map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$(npm --version)"; then
+            npm install -g npm@^11.5.1
+          fi
+          npm --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:lib
-      - name: Publish if this version is new
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Decide whether to publish
+        id: version
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./packages/shaping/package.json').version")
-          if npm view "shaping@$VERSION" version >/dev/null 2>&1; then
+          if ! npm view shaping version >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::shaping is not on npm yet. Trusted publishing cannot do a first publish: publish the first version locally, then add the Trusted Publisher. See the fleet npm-publishing skill."
+          elif npm view "shaping@$VERSION" version >/dev/null 2>&1; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
             echo "shaping@$VERSION is already on npm; nothing to publish."
-            exit 0
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
           fi
-          if [ -z "${NODE_AUTH_TOKEN}" ]; then
-            echo "::error::NPM_TOKEN is not set on this repository, so shaping@$VERSION cannot be published."
-            exit 1
-          fi
-          cd packages/shaping
-          pnpm publish --access public --no-git-checks
+      - name: Publish
+        if: steps.version.outputs.new == 'true'
+        working-directory: packages/shaping
+        run: pnpm publish --access public --no-git-checks --provenance
       - name: Verify the registry serves this version
+        if: steps.version.outputs.new == 'true'
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./packages/shaping/package.json').version")
