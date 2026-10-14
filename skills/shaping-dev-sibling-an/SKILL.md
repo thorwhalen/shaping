@@ -28,6 +28,8 @@ Neither imports the other. The link is a format and shared research.
 
 The JSON shape of a flattened track is kept readable by both. Before changing it here, read `an`'s schema and composition modules and check that the change can be read there. If it cannot, write the difference down in ADR 0002.
 
+`an` now reads the authored flat timeline (`an.timeline` v1). shaping's stored tracks keep the older flat-action shape and reach `an` through `toAnTimeline` (`src/animate/an-timeline.ts`). Its tests read `timeline.schema.json` and `easing.json` from the npm package `@thorwhalen/an-contract` (an exact-pinned devDependency; never copy those files). To follow a contract change, bump that pin and run the tests. `an`'s `ease_*` names are quadratic curves, shaping's are cubic: map by curve, never by name.
+
 ## Research in `an` worth reading before designing here
 
 In `an`'s `misc/docs/`: the reports on scene-graph and animation system design patterns, on declarative parameter languages, and on animation interchange formats; and the notes on golden-image tests for deterministic renders. Its project instructions list its architectural pillars.

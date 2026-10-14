@@ -12,4 +12,6 @@
 
 **Consequences.** A change to the track format in either project is a change to check against the other. The format is small on purpose.
 
+**Amendment, 2026-10-14 (shaping#10).** `an` moved on: its timing contract now reads the authored flat timeline (`an.timeline` v1, rows of `{start, end, address, change}`), published with its easing table as the data-only npm package `@thorwhalen/an-contract` (`an`'s ADR 0006). shaping keeps storing tracks in the older flat-action shape, so saved designs need no migration, and exports them with `toAnTimeline` (`shaping/animate`). The differences, as the exporter resolves them: an address is `<target>:<property>` (optionally under an entity, `vase/view:azimuthDeg`); a null `from_value` means the value in the input design here and the value at the tween's start in `an`, so the exporter writes it when given the design; shaping's easings are cubic and `an`'s `ease_*` are quadratic, so the exporter writes exact cubic Béziers (and `ease_in_out` as two tweens), never the names; `fps` and `loop` have no place in `an`'s timeline and are dropped. The package is a devDependency read only by the tests, which validate the export against its `timeline.schema.json` and check every easing written against its `easing.json`; decision 2 still holds for code.
+
 Status: accepted, 2026-09-29. Also recorded in `docs/architecture.md`.

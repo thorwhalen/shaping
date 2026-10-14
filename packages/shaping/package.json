@@ -80,7 +80,9 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@thorwhalen/an-contract": "1.8.0",
     "@types/node": "^22.0.0",
+    "ajv": "8.20.0",
     "typescript": "5.9.3",
     "vitest": "^5.0.2"
   }

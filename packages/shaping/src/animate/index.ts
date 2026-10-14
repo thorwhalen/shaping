@@ -1,18 +1,35 @@
 /**
  * Animation: a function from a time to a `Design`.
  *
- * Pure and DOM-free. An `Animation` is a flat list of actions in the shape used by the `an` package
- * (`set` and `tween`, absolute start and end times). `designAt(design, t)` applies every action at
+ * Pure and DOM-free. An `Animation` is a flat list of actions in the `an` package's older, IR-shaped
+ * form (`set` and `tween`, absolute start and end times); `toAnTimeline` exports it as `an`'s
+ * current authored timeline (`an.timeline` v1). `designAt(design, t)` applies every action at
  * time `t` to a copy of the design; the caller then renders (view/style changes) or rebuilds the
  * Model (anything else, see `rebuildsGeometry`). The viewer never fakes geometry.
  *
  * Easings use the standard cubic curves: `ease_in` = t^3, `ease_out` = 1 - (1 - t)^3, and
- * `ease_in_out` = 4t^3 below one half, 1 - (-2t + 2)^3 / 2 above. Names follow `an`.
+ * `ease_in_out` = 4t^3 below one half, 1 - (-2t + 2)^3 / 2 above. The names are those of `an`'s
+ * older track format; `an`'s own `ease_*` curves are quadratic, so `toAnTimeline` writes the curves
+ * (exact cubic Béziers), not the names.
  *
  * Looping: frame N equals frame 0, so an animation writes `frameCount` = round(duration * fps)
  * frames at times i / fps and never the frame at `duration`.
  */
 import type { Animation, Design, FlatAction } from '../design.js';
+import { locate, readNumber } from './address.js';
+
+export {
+  AN_EASING_PIECES,
+  AN_TIMELINE_FORMAT,
+  AN_TIMELINE_VERSION,
+  toAnTimeline,
+  type AnAction,
+  type AnChange,
+  type AnEasing,
+  type AnEasingPiece,
+  type AnTimeline,
+  type ToAnTimelineOptions,
+} from './an-timeline.js';
 
 export type EasingName = 'linear' | 'ease_in' | 'ease_out' | 'ease_in_out';
 export type Easing = (t: number) => number;
@@ -25,10 +42,6 @@ const DEFAULT_FPS = 24;
 const DEFAULT_SECONDS = 4;
 /** Targets whose actions never change geometry. */
 const RENDER_ONLY_TARGETS: ReadonlySet<string> = new Set(['view', 'style']);
-/** The pseudo-target addressing top-level keys of the Design itself (e.g. `sizeMm`). */
-const DESIGN_TARGET = 'design';
-/** Only this section may gain new keys (genre parameters have defaults absent from the document). */
-const OPEN_TARGET = 'params';
 
 const EASING_TABLE: Record<EasingName, Easing> = {
   linear: (t) => t,
@@ -57,47 +70,6 @@ export function frameTime(i: number, animation: Pick<Animation, 'fps'>): number 
 /** True when any action targets something other than `view` or `style`, so frames need a rebuild. */
 export function rebuildsGeometry(animation: Pick<Animation, 'actions'>): boolean {
   return animation.actions.some((a) => !RENDER_ONLY_TARGETS.has(a.action.target));
-}
-
-// ------------------------------------------------------------------ addressing
-
-type Bag = Record<string, unknown>;
-
-function isBag(x: unknown): x is Bag {
-  return typeof x === 'object' && x !== null;
-}
-
-function rootOf(design: Design, target: string): Bag {
-  const root: unknown = target === DESIGN_TARGET ? design : (design as unknown as Bag)[target];
-  if (!isBag(root)) {
-    throw new Error(`Unknown animation target "${target}": expected "${DESIGN_TARGET}" or a section of the design such as params, view, style`);
-  }
-  return root;
-}
-
-/** Find the container and key addressed by `property`. Throws naming the target and path. */
-function locate(design: Design, target: string, property: string): { parent: Bag; key: string } {
-  const path = property.split('.');
-  let node = rootOf(design, target);
-  path.slice(0, -1).forEach((segment, depth) => {
-    const next = node[segment];
-    if (!isBag(next)) {
-      throw new Error(`Unknown property path "${property}" in target "${target}": no "${path.slice(0, depth + 1).join('.')}"`);
-    }
-    node = next;
-  });
-  const key = path[path.length - 1];
-  if (!(key in node) && target !== OPEN_TARGET) {
-    throw new Error(`Unknown property path "${property}" in target "${target}"`);
-  }
-  return { parent: node, key };
-}
-
-function readNumber(design: Design, target: string, property: string): number {
-  const { parent, key } = locate(design, target, property);
-  const value = parent[key];
-  if (typeof value !== 'number') throw new Error(`Cannot tween "${target}.${property}": its value is not a number`);
-  return value;
 }
 
 // ------------------------------------------------------------------ evaluation
