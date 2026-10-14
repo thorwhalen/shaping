@@ -9,7 +9,8 @@ import { createRequire } from 'node:module';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import { DesignSchema, EASINGS, type Animation, type Design, type FlatAction } from '../design.js';
-import { AN_EASING_PIECES, designAt, ease, sweep, toAnTimeline, turntable, type AnAction, type AnTimeline } from '../animate/index.js';
+import { designAt, ease, sweep, toAnTimeline, turntable, type AnAction, type AnTimeline } from '../animate/index.js';
+import { EASING_PIECES } from '../animate/an-timeline.js';
 
 const require = createRequire(import.meta.url);
 const contract = (file: string) => JSON.parse(readFileSync(require.resolve(`@thorwhalen/an-contract/${file}`), 'utf8'));
@@ -72,7 +73,7 @@ describe('the easings toAnTimeline writes', () => {
   });
 
   it('every name written exists in easing.json, every spec is a cubic-bezier with x in [0, 1]', () => {
-    for (const pieces of Object.values(AN_EASING_PIECES))
+    for (const pieces of Object.values(EASING_PIECES))
       for (const p of pieces) {
         if (p.easing.startsWith('cubic-bezier(')) bezierCurve(p.easing);
         else expect(NAMES, p.easing).toContain(p.easing);
@@ -80,7 +81,7 @@ describe('the easings toAnTimeline writes', () => {
   });
 
   it('a named easing is used whole, so its easing.json samples are its curve; they match shaping', () => {
-    for (const [name, pieces] of Object.entries(AN_EASING_PIECES))
+    for (const [name, pieces] of Object.entries(EASING_PIECES))
       for (const p of pieces.filter((q) => !q.easing.startsWith('cubic-bezier('))) {
         expect(p).toMatchObject({ t0: 0, t1: 1, v0: 0, v1: 1 });
         const entry = EASING_TABLE.entries.find((e) => e.name === p.easing)!;
@@ -89,7 +90,7 @@ describe('the easings toAnTimeline writes', () => {
   });
 
   it.each(EASINGS)('%s: the pieces draw exactly shaping\'s curve', (name) => {
-    const pieces = AN_EASING_PIECES[name];
+    const pieces = EASING_PIECES[name];
     expect(pieces[0].t0).toBe(0);
     expect(pieces[pieces.length - 1].t1).toBe(1);
     const drawn = (u: number) => {
@@ -106,7 +107,7 @@ describe('the easings toAnTimeline writes', () => {
     const at = EASING_TABLE.sample_u.indexOf(0.25);
     expect(quad.samples[at]).toBeCloseTo(0.125);
     expect(ease('ease_in_out')(0.25)).toBeCloseTo(0.0625);
-    const written = Object.values(AN_EASING_PIECES).flatMap((ps) => ps.map((p) => p.easing));
+    const written = Object.values(EASING_PIECES).flatMap((ps) => ps.map((p) => p.easing));
     for (const n of ['ease_in', 'ease_out', 'ease_in_out']) expect(written).not.toContain(n);
   });
 });
@@ -139,6 +140,7 @@ function representative(): Animation {
       tween(3, 6, 'view', 'panX', 2, 0.5, 'ease_in_out'),
       set(1.5, 'design', 'sizeMm', 80),
       set(2.5, 'style', 'color', '#123456'),
+      set(2, 'view', 'azimuthDeg', 123), // touches the azimuth tween's end: allowed, and the set wins at t = 2 in both
     ],
   };
 }
@@ -162,25 +164,33 @@ function readIn(design: Design, target: string, path: string[]): unknown {
   return path.reduce<unknown>((node, k) => (node as Record<string, unknown>)[k], root);
 }
 
-/** The value at `address` and time `t`, applying the rows in order (an absent `from` = the value at start). */
+/**
+ * The value at `address` and time `t` by an's rule, ported from `evaluate_timeline` in an's
+ * `an/timing/timeline.py`: a row playing at `t` (inclusive end) is active, and the later active row
+ * wins; otherwise an ended row holds its end value, the latest end winning (a tie to the later
+ * row); otherwise the address is at rest (here: its value in the design). An absent `from` is the
+ * value the earlier rows give at the row's start.
+ */
 function evaluate(doc: AnTimeline, design: Design, address: string, t: number): unknown {
   const rows = doc.actions.filter((r) => r.address === address);
   const { target, path } = parseAddress(address);
-  const valueAt = (k: number, time: number): unknown => {
-    let value = readIn(design, target, path);
-    rows.slice(0, k).forEach((r, j) => {
-      if (time < r.start) return;
-      if (r.change.kind === 'set') value = r.change.value;
-      else {
-        const from = 'from' in r.change ? (r.change.from as number) : (valueAt(j, r.start) as number);
-        const span = r.end - r.start;
-        const u = span > 0 ? (time - r.start) / span : 1;
-        value = from + ((r.change.to as number) - from) * anCurve(r.change.easing)(u);
-      }
-    });
-    return value;
+  const rest = readIn(design, target, path);
+  const rowValue = (j: number, time: number): unknown => {
+    const r = rows[j];
+    if (r.change.kind === 'set') return r.change.value;
+    const from = 'from' in r.change ? (r.change.from as number) : (poseAt(j, r.start) as number);
+    return from + ((r.change.to as number) - from) * anCurve(r.change.easing)((time - r.start) / (r.end - r.start));
   };
-  return valueAt(rows.length, t);
+  const poseAt = (k: number, time: number): unknown => {
+    let active: { value: unknown } | undefined;
+    let held: { end: number; value: unknown } | undefined;
+    rows.slice(0, k).forEach((r, j) => {
+      if (r.start <= time && time <= r.end) active = { value: rowValue(j, time) };
+      else if (time > r.end && (!held || r.end >= held.end)) held = { end: r.end, value: rowValue(j, r.end) };
+    });
+    return active ? active.value : held ? held.value : rest;
+  };
+  return poseAt(rows.length, t);
 }
 
 function expectSameMeaning(track: Animation, doc: AnTimeline, design: Design) {
@@ -212,7 +222,7 @@ describe('toAnTimeline', () => {
     expectValid(toAnTimeline({ fps: 24, duration: 1, loop: true, actions: [] }));
   });
 
-  it('means what the track means: evaluated at 121 times, it equals designAt', () => {
+  it('on tracks without overlaps, an\'s rule evaluated at 121 times equals designAt', () => {
     expectSameMeaning(track, toAnTimeline(track), design);
     expectSameMeaning(withRetween(), toAnTimeline(withRetween(), { design }), design);
     const looping = sweep(design, { target: 'view', property: 'elevationDeg', from: 10, to: 60, seconds: 2, pingPong: true });
@@ -225,7 +235,7 @@ describe('toAnTimeline', () => {
     expect(byAddress('design:sizeMm')).toEqual([{ start: 1.5, end: 1.5, address: 'design:sizeMm', change: { kind: 'set', value: 80 } }]);
     expect(byAddress('style:color')[0].change).toEqual({ kind: 'set', value: '#123456' });
     expect(byAddress('view:azimuthDeg')[0].change).toEqual({ kind: 'tween', from: 10, to: 200, easing: 'linear' });
-    expect(byAddress('params:placement.front.scale')[0].change).toEqual({ kind: 'tween', to: 3, easing: AN_EASING_PIECES.ease_in[0].easing });
+    expect(byAddress('params:placement.front.scale')[0].change).toEqual({ kind: 'tween', to: 3, easing: EASING_PIECES.ease_in[0].easing });
     expect(byAddress('view:distance')[0].change).toEqual({ kind: 'tween', to: 8, easing: 'linear' });
   });
 
@@ -238,13 +248,13 @@ describe('toAnTimeline', () => {
   it('splits ease_in_out into two halves of the time and of the change', () => {
     const rows = toAnTimeline(track).actions.filter((r) => r.address === 'view:elevationDeg');
     expect(rows).toEqual([
-      { start: 0, end: 1.5, address: 'view:elevationDeg', change: { kind: 'tween', from: 5, to: 32.5, easing: AN_EASING_PIECES.ease_in_out[0].easing } },
-      { start: 1.5, end: 3, address: 'view:elevationDeg', change: { kind: 'tween', from: 32.5, to: 60, easing: AN_EASING_PIECES.ease_in_out[1].easing } },
+      { start: 0, end: 1.5, address: 'view:elevationDeg', change: { kind: 'tween', from: 5, to: 32.5, easing: EASING_PIECES.ease_in_out[0].easing } },
+      { start: 1.5, end: 3, address: 'view:elevationDeg', change: { kind: 'tween', from: 32.5, to: 60, easing: EASING_PIECES.ease_in_out[1].easing } },
     ]);
   });
 
   it('refuses an ease_in_out tween with no from_value and no design, naming the remedy', () => {
-    expect(() => toAnTimeline(withRetween())).toThrow(/action 8.*pass \{ design \}/);
+    expect(() => toAnTimeline(withRetween())).toThrow(/action 9.*pass \{ design \}/);
     const bare: Animation = { fps: 24, duration: 1, loop: false, actions: [tween(0, 1, 'view', 'zoom', 2, null, 'ease_in_out')] };
     expect(() => toAnTimeline(bare)).toThrow(/action 0.*pass \{ design \}/);
     expect(toAnTimeline(bare, { design }).actions.map((r) => r.change)).toMatchObject([{ from: 1 }, { from: 1.5, to: 2 }]);
@@ -277,12 +287,57 @@ describe('toAnTimeline', () => {
   });
 
   it('writes actions in the order designAt applies them (halves of a split tween together), and never mutates its inputs', () => {
-    const distinct: Animation = { ...track, actions: track.actions.map((fa, i) => ({ ...fa, start: fa.start + i / 100, end: fa.end + i / 100 })) };
-    const shuffled: Animation = { ...distinct, actions: [...distinct.actions].reverse() };
-    const before = JSON.stringify([shuffled, design]);
-    expect(toAnTimeline(shuffled, { design })).toEqual(toAnTimeline(distinct, { design }));
-    const firstRows = toAnTimeline(distinct).actions.filter((r: AnAction, i, all) => i === 0 || all[i - 1].address !== r.address || all[i - 1].end !== r.start);
-    expect(firstRows.map((r) => r.start)).toEqual(distinct.actions.map((fa) => fa.start).sort((a, b) => a - b));
-    expect(JSON.stringify([shuffled, design])).toBe(before);
+    const listed: Animation = {
+      fps: 24,
+      duration: 4,
+      loop: false,
+      actions: [tween(2, 4, 'style', 'opacity', 0, 1, 'linear'), tween(0, 2, 'view', 'elevationDeg', 60, 0, 'ease_in_out'), set(1, 'design', 'sizeMm', 70)],
+    };
+    const reversed: Animation = { ...listed, actions: [...listed.actions].reverse() };
+    const before = JSON.stringify([listed, reversed, design]);
+    const rows = (a: Animation) => toAnTimeline(a, { design }).actions.map((r: AnAction) => [r.address, r.start, r.end]);
+    const want = [['view:elevationDeg', 0, 1], ['view:elevationDeg', 1, 2], ['design:sizeMm', 1, 1], ['style:opacity', 2, 4]];
+    expect(rows(listed)).toEqual(want);
+    expect(rows(reversed)).toEqual(want);
+    expect(JSON.stringify([listed, reversed, design])).toBe(before);
+  });
+
+  it('refuses overlapping actions on one address, naming both (an holds active over held, shaping the last started)', () => {
+    const two = (a: FlatAction, b: FlatAction): Animation => ({ fps: 24, duration: 4, loop: false, actions: [a, b] });
+    const overlaps = /action 1 \((tween|set) over .*\) overlaps animation action 0 .* on "view:zoom"/;
+    // an inner tween inside an outer one: at t = 3 shaping shows -50, an 75
+    expect(() => toAnTimeline(two(tween(0, 4, 'view', 'zoom', 100, 0, 'linear'), tween(1, 2, 'view', 'zoom', -50, 0, 'linear')))).toThrow(overlaps);
+    // a set in the middle of a tween: at t = 2 shaping shows 99, an 20
+    expect(() => toAnTimeline(two(tween(0, 3, 'view', 'zoom', 30, 0, 'linear'), set(1.5, 'view', 'zoom', 99)))).toThrow(overlaps);
+    // the same start, the shorter one listed later
+    expect(() => toAnTimeline(two(tween(0, 4, 'view', 'zoom', 100, 0, 'linear'), tween(0, 2, 'view', 'zoom', 5, 0, 'linear')))).toThrow(overlaps);
+    // a set at a tween's start, listed after it (it would win for good in shaping, only at the instant in an)
+    expect(() => toAnTimeline(two(tween(0, 2, 'view', 'zoom', 3, 1, 'linear'), set(0, 'view', 'zoom', 9)))).toThrow(overlaps);
+    // touching at an instant is fine, in either kind
+    expect(() => toAnTimeline(two(tween(0, 2, 'view', 'zoom', 3, 1, 'linear'), tween(2, 4, 'view', 'zoom', 1, 3, 'ease_in_out')))).not.toThrow();
+    expect(() => toAnTimeline(two(set(0, 'view', 'zoom', 9), tween(0, 2, 'view', 'zoom', 3, 1, 'linear')))).not.toThrow();
+    // other addresses may overlap freely
+    expect(() => toAnTimeline(two(tween(0, 4, 'view', 'zoom', 3, 1, 'linear'), tween(1, 2, 'view', 'panX', 1, 0, 'linear')))).not.toThrow();
+  });
+
+  it('why: the inner-tween track means different things under the two rules', () => {
+    const doc: AnTimeline = {
+      format: 'an.timeline',
+      version: 1,
+      actions: [
+        { start: 0, end: 4, address: 'view:zoom', change: { kind: 'tween', from: 0, to: 100, easing: 'linear' } },
+        { start: 1, end: 2, address: 'view:zoom', change: { kind: 'tween', from: 0, to: -50, easing: 'linear' } },
+      ],
+    };
+    const track: Animation = { fps: 24, duration: 4, loop: false, actions: [tween(0, 4, 'view', 'zoom', 100, 0, 'linear'), tween(1, 2, 'view', 'zoom', -50, 0, 'linear')] };
+    expect(evaluate(doc, design, 'view:zoom', 3)).toBeCloseTo(75);
+    expect(designAt({ ...design, animation: track }, 3).view.zoom).toBeCloseTo(-50);
+  });
+
+  it('refuses spans an cannot play: a tween needs end > start, a set end >= start', () => {
+    const one = (a: FlatAction): Animation => ({ fps: 24, duration: 4, loop: false, actions: [a] });
+    expect(() => toAnTimeline(one(tween(1, 1, 'view', 'zoom', 2, 1, 'linear')))).toThrow(/action 0: tween over \[1, 1\]: a tween needs end > start/);
+    expect(() => toAnTimeline(one(tween(2, 1, 'view', 'zoom', 2, 1, 'linear')))).toThrow(/end > start/);
+    expect(() => toAnTimeline(one({ start: 2, end: 1, action: { kind: 'set', target: 'view', property: 'zoom', value: 1, at: 0 } }))).toThrow(/action 0: set over \[2, 1\]: a set needs end >= start/);
   });
 });

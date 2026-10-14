@@ -43,7 +43,7 @@ The app animates through `previz`, a private library that is not on npm yet. Bef
 
 ## Related
 
-`an` (structured animation, Python) shares this project's animation track model; see `docs/adr/0002-relationship-to-an.md`. Tracks (`shaping/animate`) are stored in `an`'s older flat-action shape; `toAnTimeline(track, { design })` exports one as `an`'s authored timeline (`an.timeline` v1: `{start, end, address, change}` rows), checked in the tests against the schema and easing table of the `@thorwhalen/an-contract` package:
+`an` (structured animation, Python) shares this project's animation track model; see `docs/adr/0002-relationship-to-an.md`. Tracks (`shaping/animate`) are stored in `an`'s older flat-action shape; `toAnTimeline(track, { design })` exports one as `an`'s authored timeline (`an.timeline` v1: `{start, end, address, change}` rows), checked in the tests against the schema and easing table of the `@thorwhalen/an-contract` package. It refuses what would mean something else in `an`: overlapping actions on one property, and zero-length tweens:
 
 ```ts
 import { toAnTimeline, turntable } from 'shaping/animate';

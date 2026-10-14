@@ -24,12 +24,26 @@
  * - **set.** `{kind: "set", value}` from `start`. The stored `at` is dropped (`designAt` ignores it).
  * - **tween.** `{kind: "tween", from?, to, easing}` over `[start, end]`. The stored `duration` is
  *   dropped (it repeats `end - start`, which is what `designAt` uses).
+ * - **Spans.** A tween needs `end > start` (`an` refuses a clip of zero or negative length), a set
+ *   `end >= start`; anything else is refused, naming the action.
+ * - **Overlaps are refused.** The two projects resolve overlapping actions on one property
+ *   differently. `designAt` applies actions by start time, so the last one to have started wins,
+ *   for good. `an` (its compiled kernel, `evaluate_timeline`) holds active over held: an action
+ *   playing at `t` wins over one that has ended, later in order among active ones, and among ended
+ *   ones the latest end wins. A tween over [0, 4] with a shorter tween over [1, 2] inside it shows
+ *   the inner tween's end value at t = 3 in shaping and the outer tween in `an`. So two actions on
+ *   one address must follow each other: each starts at or after every earlier one (in `designAt`'s
+ *   order) has ended. Touching at an instant is fine (a tween ending at 2 and a set at 2); anything
+ *   more is refused, naming both actions. On tracks that pass, both rules give the same value.
  * - **from.** A stored `from_value` is written. A null one means, in shaping, "the value in the
- *   input design"; in `an` an absent `from` means "the value the property has at `start`". Pass
- *   `design` and the exporter reads the value from it (the same rule as `designAt`) and writes it,
- *   so the timeline means exactly what the track means. Without `design`, `from` is left out, which
- *   means the same unless an earlier action changed that property before the tween starts.
- * - **easing.** Always written, as the `an` easing that draws the same curve (`AN_EASING_PIECES`).
+ *   input design"; in `an` an absent `from` means "the value the property has at `start`", which
+ *   before any action on it is the entity's rest value in the `an` scene, something this exporter
+ *   cannot know or set for a shaping design. Pass `design` and the exporter reads the value from it
+ *   (the same rule as `designAt`) and writes it, so nothing is left for `an` to resolve. Without
+ *   `design`, `from` is left out and the result depends on the rest value the reading scene gives
+ *   that address; it matches shaping only when that equals the value in the design and no earlier
+ *   action has changed the property.
+ * - **easing.** Always written, as the `an` easing that draws the same curve (see `EASING_PIECES`).
  *   shaping's easings are cubic; `an`'s `ease_in`, `ease_out` and `ease_in_out` are quadratic, so
  *   the names are not reused. `linear` (and null) is `an`'s `linear`; `ease_in` (u^3) and `ease_out`
  *   (1 - (1 - u)^3) are exact cubic Béziers; `ease_in_out` (cubic, in two halves) is written as two
@@ -82,7 +96,7 @@ type TweenAction = Extract<FlatAction['action'], { kind: 'tween' }>;
  * One piece of a shaping easing drawn in `an`: over the share `[t0, t1]` of the tween's time, the
  * value goes from the share `v0` to `v1` of its change, through `an`'s `easing`.
  */
-export interface AnEasingPiece {
+interface EasingPiece {
   t0: number;
   t1: number;
   v0: number;
@@ -99,10 +113,13 @@ const bezier = (x1: number, y1: number, x2: number, y2: number) => `cubic-bezier
  */
 const CUBIC_IN = bezier(1 / 3, 0, 2 / 3, 0);
 const CUBIC_OUT = bezier(1 / 3, 1, 2 / 3, 1);
-const whole = (easing: string): AnEasingPiece[] => [{ t0: 0, t1: 1, v0: 0, v1: 1, easing }];
+const whole = (easing: string): EasingPiece[] => [{ t0: 0, t1: 1, v0: 0, v1: 1, easing }];
 
-/** Each shaping easing as the `an` easings that draw exactly its curve (see the module docstring). */
-export const AN_EASING_PIECES: Readonly<Record<ShapingEasing, readonly AnEasingPiece[]>> = {
+/**
+ * Each shaping easing as the `an` easings that draw exactly its curve (see the module docstring).
+ * Exported for the tests only; not part of the public API (`shaping/animate` does not re-export it).
+ */
+export const EASING_PIECES: Readonly<Record<ShapingEasing, readonly EasingPiece[]>> = {
   linear: whole('linear'),
   ease_in: whole(CUBIC_IN),
   ease_out: whole(CUBIC_OUT),
@@ -113,7 +130,7 @@ export const AN_EASING_PIECES: Readonly<Record<ShapingEasing, readonly AnEasingP
 };
 
 export interface ToAnTimelineOptions {
-  /** The design the track animates: resolves null `from_value`s exactly (see the module docstring). */
+  /** The design the track animates: null `from_value`s are read from it, as `designAt` does (see the module docstring). */
   design?: Design;
   /** Name of the entity the design is in an `an` scene: its sections become nodes (`vase/view:azimuthDeg`). */
   entity?: string;
@@ -142,8 +159,8 @@ function anAddress(target: string, property: string, entity: string | undefined,
 }
 
 function tweenRows(a: TweenAction, start: number, end: number, address: string, design: Design | undefined, where: string): AnAction[] {
-  const pieces = AN_EASING_PIECES[a.easing ?? 'linear'];
-  if (!pieces) throw new Error(`${where}: unknown easing "${a.easing}". Known: ${Object.keys(AN_EASING_PIECES).join(', ')}`);
+  const pieces = EASING_PIECES[a.easing ?? 'linear'];
+  if (!pieces) throw new Error(`${where}: unknown easing "${a.easing}". Known: ${Object.keys(EASING_PIECES).join(', ')}`);
   const from = a.from_value ?? (design ? readNumber(design, a.target, a.property) : null);
   if (from === null && pieces.length > 1) {
     throw new Error(`${where}: a "${a.easing}" tween of "${a.target}.${a.property}" without from_value is split in two, which needs its start value: pass { design }`);
@@ -158,18 +175,36 @@ function tweenRows(a: TweenAction, start: number, end: number, address: string, 
   }));
 }
 
+function checkSpan(kind: string, start: number, end: number, where: string): void {
+  if (kind === 'tween' ? end > start : end >= start) return;
+  const need = kind === 'tween' ? 'a tween needs end > start (an refuses a clip of zero or negative length)' : 'a set needs end >= start';
+  throw new Error(`${where}: ${kind} over [${start}, ${end}]: ${need}`);
+}
+
 /**
  * The track as `an`'s authored flat timeline, ready for `timeline.schema.json`. Pure: the track
- * and the design are never mutated. See the module docstring for how each field maps, and what
- * happens to `fps` and `loop`.
+ * and the design are never mutated. Refuses (naming the actions) a track whose meaning in `an` would
+ * differ: overlapping actions on one property, or a span of the wrong length. See the module
+ * docstring for how each field maps, and what happens to `fps` and `loop`.
  */
 export function toAnTimeline(track: Animation, options: ToAnTimelineOptions = {}): AnTimeline {
   const { design, entity } = options;
   const ordered = track.actions.map((fa, i) => ({ fa, i })).sort((x, y) => x.fa.start - y.fa.start || x.i - y.i);
+  /** Per address, the earlier action that ends last: the one a later action must not start before. */
+  const lastEnd = new Map<string, { end: number; i: number }>();
   const actions = ordered.flatMap(({ fa, i }): AnAction[] => {
     const where = `animation action ${i}`;
     const a = fa.action;
     const address = anAddress(a.target, a.property, entity, where);
+    checkSpan(a.kind, fa.start, fa.end, where);
+    const prior = lastEnd.get(address);
+    if (prior && prior.end > fa.start) {
+      throw new Error(
+        `${where} (${a.kind} over [${fa.start}, ${fa.end}]) overlaps animation action ${prior.i} (ending at ${prior.end}) on "${address}": ` +
+          'an holds the action playing over the one started last, so overlapping actions on one property cannot be exported; make them follow each other',
+      );
+    }
+    if (!prior || fa.end >= prior.end) lastEnd.set(address, { end: fa.end, i });
     if (a.kind === 'set') return [{ start: fa.start, end: fa.end, address, change: { kind: 'set', value: structuredClone(a.value) } }];
     return tweenRows(a, fa.start, fa.end, address, design, where);
   });

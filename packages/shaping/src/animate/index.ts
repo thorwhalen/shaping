@@ -19,14 +19,12 @@ import type { Animation, Design, FlatAction } from '../design.js';
 import { locate, readNumber } from './address.js';
 
 export {
-  AN_EASING_PIECES,
   AN_TIMELINE_FORMAT,
   AN_TIMELINE_VERSION,
   toAnTimeline,
   type AnAction,
   type AnChange,
   type AnEasing,
-  type AnEasingPiece,
   type AnTimeline,
   type ToAnTimelineOptions,
 } from './an-timeline.js';
