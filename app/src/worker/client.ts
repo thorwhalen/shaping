@@ -5,6 +5,7 @@
  * finished intermediate result still arrives (live feedback) and the last one arrives last.
  */
 import type { Design, Figure, Model, PrepareParams, Source } from 'shaping';
+import { rememberDisplays } from '../viewer/display';
 import type { MaskPreview, Request, Response } from './protocol';
 
 export class GeometryClient {
@@ -46,6 +47,7 @@ export class GeometryClient {
   /** Builds with the same `key` supersede each other; use distinct keys for independent streams. */
   async build(design: Design, figures: Record<string, Figure>, key = 'build'): Promise<Model | null> {
     const r = await this.call<Extract<Response, { kind: 'build' }>>({ kind: 'build', key, design, figures } as Omit<Request, 'id'>);
+    if (r) rememberDisplays(r.model, r.display);
     return r?.model ?? null;
   }
 
