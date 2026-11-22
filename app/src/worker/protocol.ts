@@ -3,6 +3,7 @@
  * figures as polygons, models as typed arrays (transferred, not copied).
  */
 import type { Design, Figure, Model, PrepareParams, Source } from 'shaping';
+import type { BodyDisplay } from '../viewer/display';
 
 export type Request =
   | { kind: 'resolve'; id: number; slot: string; source: Source; prepare: PrepareParams }
@@ -21,7 +22,8 @@ export interface MaskPreview {
 export type Response =
   | { kind: 'resolve'; id: number; slot: string; figure: Figure }
   | { kind: 'mask'; id: number; slot: string; preview: MaskPreview }
-  | { kind: 'build'; id: number; model: Model }
+  /** `display`: each body's creased display data, computed beside the build (shaping#9). */
+  | { kind: 'build'; id: number; model: Model; display: BodyDisplay[] }
   | { kind: 'export'; id: number; bytes: Uint8Array }
   | { kind: 'error'; id: number; request: Request['kind']; message: string }
   /** The request was replaced by a newer one of the same kind before it ran. */

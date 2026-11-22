@@ -7,14 +7,13 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { recolor, type Body, type Design, type Model, type PlanarRegion } from 'shaping';
 import { lightDirection, modelCentre, modelRadius } from './camera';
 import { materialFor } from './materials';
 import { roomPlanes, type RoomPlane } from './room';
+import { displayGeometry, displayOf } from './display';
 
-/** Normals are smoothed across edges flatter than this, and kept sharp across steeper ones. */
-export const CREASE_ANGLE_DEG = 32;
+export { CREASE_ANGLE_DEG } from './display';
 
 /** Colours of the diagnostic layers. */
 export const REGION_STYLE = {
@@ -76,14 +75,8 @@ const SHADOW_NORMAL_BIAS_PER_RADIUS = 0.004;
 const Z_UP_TO_Y_UP = new THREE.Euler(-Math.PI / 2, 0, 0);
 
 function BodyMesh({ body, design, clip }: { body: Body; design: Design; clip: THREE.Plane[] }) {
-  const geometry = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(body.positions, 3));
-    g.setIndex(new THREE.BufferAttribute(body.indices, 1));
-    const creased = toCreasedNormals(g, (CREASE_ANGLE_DEG * Math.PI) / 180);
-    g.dispose();
-    return creased;
-  }, [body]);
+  // The worker sent the creased normals with the model; only a body from elsewhere is creased here.
+  const geometry = useMemo(() => displayGeometry(displayOf(body)), [body.positions, body.indices]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => geometry.dispose(), [geometry]);
   const m = materialFor(design.style);
   return (

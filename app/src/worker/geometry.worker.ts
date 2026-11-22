@@ -12,6 +12,7 @@ import { exportModel } from 'shaping/export';
 import { decodeImage, makeResolvers, prepareMask } from 'shaping/imaging';
 import { fontProvider } from '../fonts/provider';
 import { getBlob, isBlobRef } from '../lib/blobs';
+import { displayBuffers, modelDisplays } from '../viewer/display';
 import type { Request, Response } from './protocol';
 
 let kernelPromise: Promise<Kernel> | null = null;
@@ -56,8 +57,10 @@ async function handle(req: Request): Promise<void> {
     }
     case 'build': {
       const model = buildFromFigures(req.design, req.figures, { kernel: k, genres: genres });
+      // The viewer's display data too, so the page never runs the creasing itself.
+      const display = modelDisplays(model);
       const transfer = [...model.bodies, ...(model.union ? [model.union] : [])].flatMap((b) => [b.positions.buffer, b.indices.buffer]);
-      return post({ kind: 'build', id: req.id, model }, transfer);
+      return post({ kind: 'build', id: req.id, model, display }, [...transfer, ...displayBuffers(display)]);
     }
     case 'export': {
       const bytes = exportModel(req.model, req.format, req.options);
