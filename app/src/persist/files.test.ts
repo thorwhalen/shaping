@@ -109,6 +109,16 @@ describe('collection export and import', () => {
     expect(describeSummary(summary)).toMatch(/1 design added; 1 design kept alongside yours under a new name; 1 design already here/);
   });
 
+  it('a file holding a design that is in the Trash meets it as an existing one, not as a new one', async () => {
+    const blobs = memoryBlobs();
+    const file = await exportCollection([makeDesign('gone', { title: 'Theirs' })], { embedImages: true }, blobs);
+    const repo = memoryRepo([]);
+    const trashed = { id: 'gone', design: makeDesign('gone', { title: 'Mine, in the Trash' }) };
+    const p = createPersistence({ blobs: memoryBlobs(), repo: { ...repo, list: async () => [], listAll: async () => [trashed] } });
+    const plan = await p.planImport(p.parseFile(file.text));
+    expect(plan.conflicts.map((c) => c.key)).toEqual(['gone']);
+  });
+
   it('reports images that are neither in the file nor in the browser', async () => {
     const p = createPersistence({ blobs: memoryBlobs(), repo: memoryRepo() });
     const file = await exportCollection([imageDesign('img', 'idb:lost')], { embedImages: false }, memoryBlobs());

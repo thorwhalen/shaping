@@ -14,9 +14,12 @@ const pageBase = () => location.origin + location.pathname;
 
 export function createPersistence({ blobs, repo, base = pageBase }: { blobs: BlobStore; repo: DesignRepository; base?: () => string }): Persistence {
   const kept = async (): Promise<Design[]> => (await repo.list()).map((s) => s.design);
+  // An import is planned against every record, the Trash included: a file holding a trashed
+  // design meets it as an existing one (a conflict question), never as a new one re-made silently.
+  const known = async (): Promise<Design[]> => (await (repo.listAll ?? repo.list)()).map((s) => s.design);
 
   async function planImport(file: ParsedFile): Promise<ImportPlan> {
-    const existing = Object.fromEntries((await kept()).map((d) => [d.id, d]));
+    const existing = Object.fromEntries((await known()).map((d) => [d.id, d]));
     if (file.kind === 'design') return planMerge(existing, { [file.design.id]: file.design }, { images: file.images });
     return planMerge(existing, file.items, { rejected: file.rejected, images: file.images });
   }

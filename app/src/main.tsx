@@ -6,11 +6,14 @@ import { App } from './App';
 import { PacingProvider } from './lib/pacing';
 import { appPacing } from './state/settled';
 import { registerServiceWorker } from './persist';
+import { UndoToast } from 'undo-toast/react';
+import 'undo-toast/styles.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <PacingProvider value={appPacing}>
       <App />
+      <UndoToast />
     </PacingProvider>
   </StrictMode>,
 );

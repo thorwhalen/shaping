@@ -29,6 +29,7 @@
     "react-dom": "^19.3.0",
     "shaping": "workspace:*",
     "three": "^0.186.1",
+    "undo-toast": "file:vendor/undo-toast-0.2.0-e02f1a2.tgz",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
