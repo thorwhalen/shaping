@@ -232,7 +232,8 @@ export interface ViewerProps {
  * Driven by the host's load estimate rather than drei's `PerformanceMonitor`/`AdaptiveDpr`, which
  * measure frame rate on their own and would disagree with the pacing that decides what is shown at
  * all. Set through the Canvas `dpr` prop: the Canvas reapplies that prop when it renders, so a
- * `setDpr` call from inside would be undone.
+ * `setDpr` call from inside would be undone. Each switch resizes the drawing buffer once, and that
+ * frame's cost lands in the next load sample: accepted, as it happens at most twice per drag.
  */
 export const MAX_DPR = 2;
 export const DRAFT_DPR = 1;

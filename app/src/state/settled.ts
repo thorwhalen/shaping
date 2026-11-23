@@ -6,7 +6,7 @@
  * so on a slow device they drop the live preview instead of queueing rebuilds.
  */
 import { useEffect, useState } from 'react';
-import { nextPaint, sharedLoad, type Load } from '../lib/pacing';
+import { nextPaint, paintLoad, sharedLoad, type Load } from '../lib/pacing';
 import { useApp } from './store';
 
 export function modelOnScreen(): Promise<void> {
@@ -24,17 +24,23 @@ export function modelOnScreen(): Promise<void> {
 /** What every paced control in the app shares: see `PacingProvider`. A drag is one undo step. */
 export const appPacing = { settled: modelOnScreen, onGesture: (active: boolean) => useApp.getState().setGesture(active) };
 
+/** The loads whose slowness turns drafting on. */
+const DRAFT_LOADS: readonly Load[] = [sharedLoad, paintLoad];
+
 /**
  * Draw drafts while a drag runs on a device that cannot keep up: true while a paced gesture is under
- * way and the pacing load estimate is slow. The same estimate that drops the live preview decides
- * that what is shown is drawn cheaply; when the gesture ends the final model is drawn in full.
+ * way and a pacing load estimate is slow (the app's, for controls that rebuild, or the paint-only
+ * controls' own). The same estimates that drop the live preview decide that what is shown is drawn
+ * cheaply; when the gesture ends the final model is drawn in full. Re-renders its host only when
+ * that answer flips.
  */
-export function useDrafting(load: Load = sharedLoad): boolean {
-  const gesturing = useApp((s) => s.gesturing);
-  const [slow, setSlow] = useState(load.slow);
+export function useDrafting(loads: readonly Load[] = DRAFT_LOADS): boolean {
+  const [slow, setSlow] = useState(() => loads.some((l) => l.slow));
   useEffect(() => {
-    setSlow(load.slow);
-    return load.subscribe(setSlow);
-  }, [load]);
-  return gesturing && slow;
+    const update = () => setSlow(loads.some((l) => l.slow));
+    update();
+    const offs = loads.map((l) => l.subscribe(update));
+    return () => offs.forEach((off) => off());
+  }, [loads]);
+  return useApp((s) => s.gesturing && slow);
 }

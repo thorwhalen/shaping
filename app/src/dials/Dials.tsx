@@ -137,6 +137,8 @@ function Field({ name, path, schema, value, siblings, onChange }: { name: string
           restGhost={typeof base.default === 'number' ? base.default : undefined}
           onChange={(v) => onChange(path, type === 'integer' ? Math.round(v) : v)}
           readout={(v) => (isAuto ? 'auto' : `${formatNumber(v, step)}${base.unit ? ` ${base.unit}` : ''}`)}
+          // Render-only marks live on the View and Style schemas only, where buildKey skips them;
+          // `render-marks.test.ts` holds that, so a geometry slider is never paced by repaints.
           paintOnly={base.render === true}
         />
       </Row>

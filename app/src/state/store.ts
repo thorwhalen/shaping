@@ -147,6 +147,12 @@ export const useApp = create<AppState>()((set, get) => {
   let history: History<Design> = emptyHistory();
   /** `open`: a gesture is on and has not changed the design yet; `recorded`: its undo step exists. */
   let gesture: 'off' | 'open' | 'recorded' = 'off';
+  /**
+   * Gestures under way. Several controls can overlap (a camera drag starts while a released
+   * geometry drag still waits for its model), so the flag is a count: each start opens its own undo
+   * step, and the gesture is off only when the last one ends.
+   */
+  let gestures = 0;
 
   /** Replace the design, remembering the old one for undo. */
   function commit(before: Design, after: Design, kind = 'edit') {
@@ -224,8 +230,10 @@ export const useApp = create<AppState>()((set, get) => {
     canRedo: false,
     setActiveSlot: (slot) => set({ activeSlot: slot }),
     setGesture: (active) => {
-      gesture = active ? 'open' : 'off';
-      if (get().gesturing !== active) set({ gesturing: active });
+      gestures = Math.max(0, gestures + (active ? 1 : -1));
+      if (active) gesture = 'open';
+      else if (gestures === 0) gesture = 'off';
+      if (get().gesturing !== gestures > 0) set({ gesturing: gestures > 0 });
     },
   };
 });
