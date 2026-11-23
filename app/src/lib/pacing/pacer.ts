@@ -28,6 +28,8 @@ export interface Load {
   sample(ms: number): void;
   readonly slow: boolean;
   readonly estimateMs: number;
+  /** Call `listener` whenever `slow` flips (not on every sample). Returns the unsubscribe. */
+  subscribe(listener: (slow: boolean) => void): () => void;
 }
 
 export interface LoadOptions {
@@ -44,12 +46,19 @@ export function createLoad({ budgetMs = DEFAULT_BUDGET_MS, recoverRatio = 0.6, w
   let estimate = 0;
   let samples = 0;
   let slow = false;
+  const listeners = new Set<(slow: boolean) => void>();
   return {
     sample(ms) {
       const x = Math.min(ms, maxSampleMs);
       estimate = samples++ === 0 ? x : estimate + weight * (x - estimate);
+      const was = slow;
       if (estimate > budgetMs) slow = true;
       else if (estimate < budgetMs * recoverRatio) slow = false;
+      if (slow !== was) listeners.forEach((l) => l(slow));
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
     },
     get slow() {
       return slow;
@@ -62,6 +71,12 @@ export function createLoad({ budgetMs = DEFAULT_BUDGET_MS, recoverRatio = 0.6, w
 
 /** The estimate every pacer uses unless given its own. */
 export const sharedLoad: Load = createLoad();
+
+/**
+ * The estimate of controls whose work is only a repaint (a camera or light dial): kept apart from
+ * `sharedLoad`, so slow geometry builds elsewhere do not hold back a change that only repaints.
+ */
+export const paintLoad: Load = createLoad();
 
 /** Resolves after the next frame has been painted (or soon, where there are no frames). */
 export function nextPaint(): Promise<void> {

@@ -15,6 +15,7 @@ import { SourcePanel } from './panels/SourcePanel';
 import { designs } from './state/designs';
 import { cameFromApp, DEFAULT_PANEL, pushRoute, readRoute, replaceRoute, type Route } from './state/route';
 import { useApp } from './state/store';
+import { useDrafting } from './state/settled';
 import { AnimatePanel } from './anim/AnimatePanel';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
 import { Viewer } from './viewer/Viewer';
@@ -140,6 +141,7 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
   const design = useApp((s) => s.design)!;
   const model = useApp((s) => s.model);
   const busy = useApp((s) => s.busy);
+  const drafting = useDrafting();
   const error = useApp((s) => s.error);
   const edit = useApp((s) => s.edit);
   const [profileId, setProfileId] = useState(DEFAULT_PROFILE);
@@ -189,7 +191,7 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
         </div>
       </aside>
       <main className="relative min-h-[50vh] flex-1" {...(design.view.light === "sun" ? shiftDrag : {})}>
-        <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose}>
+        <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose} draft={drafting}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
           {design.view.light === 'sun' && <LightBall view={design.view} onChange={setLight} />}

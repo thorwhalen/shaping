@@ -158,3 +158,19 @@ describe('pacer', () => {
     expect(h.gestures.at(-1)).toBe(false);
   });
 });
+
+describe('load changes are observable', () => {
+  it('subscribe hears each flip of slow, not every sample, until unsubscribed', () => {
+    const load = createLoad({ budgetMs: 100, recoverRatio: 0.5, weight: 1 });
+    const heard: boolean[] = [];
+    const off = load.subscribe((slow) => heard.push(slow));
+    load.sample(50);
+    load.sample(150);
+    load.sample(200);
+    load.sample(80); // between recover (50) and budget: still slow
+    load.sample(10);
+    off();
+    load.sample(500);
+    expect(heard).toEqual([true, false]);
+  });
+});
