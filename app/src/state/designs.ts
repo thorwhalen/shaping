@@ -2,7 +2,7 @@
  * Where designs are kept: the `store` seam. The default is zodal's localStorage provider; a
  * replacement (zodal's S3 or Supabase providers) has the same `DataProvider` interface.
  *
- * Delete means Move to Trash: a trashed design keeps everything and gets a `deleted` time; it is
+ * Delete means Move to Trash: a trashed design keeps everything and gets a `deletedAt` time; it is
  * left out of `list` and shown by `listTrash`, from where it is restored or deleted for good
  * (`purge`, the only call that removes a record).
  */
@@ -16,8 +16,8 @@ export interface SavedDesign {
   genre: string;
   updated: string;
   design: Design;
-  /** When it was moved to the Trash (absent: not in the Trash). */
-  deleted?: string;
+  /** When it was moved to the Trash (absent or null: not in the Trash). Named as zodal's `withTrash` names it. */
+  deletedAt?: string | null;
 }
 
 const STORAGE_KEY = 'shaping.designs.v1';
@@ -43,15 +43,19 @@ export function designStore(provider: DataProvider<SavedDesign> = createLocalSto
       }
     }
   }
-  /** Set or clear `deleted` on these records; the ids it changed. */
-  async function mark(ids: readonly string[], deleted: string | undefined): Promise<string[]> {
-    const wanted = new Set(ids);
+  /** Set or clear `deletedAt` on these records (that one field only, so a save made meanwhile stays); the ids it changed. */
+  async function mark(ids: readonly string[], deletedAt: string | null): Promise<string[]> {
     const done: string[] = [];
-    for (const item of await all()) {
-      if (!wanted.has(item.id) || Boolean(item.deleted) === Boolean(deleted)) continue;
-      const { deleted: _gone, ...rest } = item;
-      await put(deleted ? { ...rest, deleted } : rest);
-      done.push(item.id);
+    for (const id of ids) {
+      let item: SavedDesign;
+      try {
+        item = await provider.getOne(id);
+      } catch {
+        continue; // gone
+      }
+      if (Boolean(item.deletedAt) === Boolean(deletedAt)) continue;
+      await provider.update(id, { deletedAt });
+      done.push(id);
     }
     return done;
   }
@@ -59,23 +63,34 @@ export function designStore(provider: DataProvider<SavedDesign> = createLocalSto
   return {
     /** Every saved design not in the Trash, newest first. */
     async list(): Promise<SavedDesign[]> {
-      return (await all()).filter((d) => !d.deleted);
+      return (await all()).filter((d) => !d.deletedAt);
     },
+    /** Everything, the Trash included (an import plans against these, so a trashed design is not silently re-made). */
+    listAll: all,
     /** What is in the Trash, most recently moved there first. */
     async listTrash(): Promise<SavedDesign[]> {
-      return (await all()).filter((d) => d.deleted).sort((a, b) => (b.deleted ?? '').localeCompare(a.deleted ?? ''));
+      return (await all()).filter((d) => d.deletedAt).sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
     },
+    /** A saved design to open; one in the Trash is not opened (restore it first). */
     async get(id: string): Promise<Design | null> {
       try {
         const s = await provider.getOne(id);
+        if (s.deletedAt) return null;
         const r = DesignSchema.safeParse(s.design);
         return r.success ? r.data : null;
       } catch {
         return null;
       }
     },
+    /** Save a design; one in the Trash stays there (an editor still open elsewhere never brings it back). */
     async save(design: Design): Promise<void> {
-      await put({ id: design.id, title: design.title, genre: design.genre, updated: new Date().toISOString(), design });
+      let deletedAt: string | null | undefined;
+      try {
+        deletedAt = (await provider.getOne(design.id)).deletedAt;
+      } catch {
+        deletedAt = undefined; // new
+      }
+      await put({ id: design.id, title: design.title, genre: design.genre, updated: new Date().toISOString(), design, ...(deletedAt ? { deletedAt } : {}) });
     },
     /** Move designs to the Trash (kept whole); the ids moved. */
     trash(ids: readonly string[]): Promise<string[]> {
@@ -83,11 +98,11 @@ export function designStore(provider: DataProvider<SavedDesign> = createLocalSto
     },
     /** Put designs back from the Trash; the ids restored. */
     restore(ids: readonly string[]): Promise<string[]> {
-      return mark(ids, undefined);
+      return mark(ids, null);
     },
     /** Delete designs for good (only from the Trash); the ids deleted. */
     async purge(ids: readonly string[]): Promise<string[]> {
-      const inTrash = new Set((await all()).filter((d) => d.deleted).map((d) => d.id));
+      const inTrash = new Set((await all()).filter((d) => d.deletedAt).map((d) => d.id));
       const done = ids.filter((id) => inTrash.has(id));
       for (const id of done) await provider.delete(id);
       return done;

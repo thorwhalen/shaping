@@ -51,7 +51,12 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
     return saved.filter((d) => (!genre || d.genre === genre) && (!q || d.title.toLowerCase().includes(q))).sort(SORTS[sort].compare);
   }, [saved, search, genre, sort]);
   const genresUsed = useMemo(() => [...new Set(saved.map((d) => d.genre))], [saved]);
-  const pickedDesigns = saved.filter((d) => picked.has(d.id));
+  // A chosen genre with no design left falls back to All (its chip is gone, so it could not be cleared).
+  useEffect(() => {
+    if (genre && !genresUsed.includes(genre)) setGenre('');
+  }, [genre, genresUsed]);
+  // Actions apply to what is shown: a design the search or genre hides is never acted on unseen.
+  const pickedDesigns = shown.filter((d) => picked.has(d.id));
 
   function pick(id: string, range: boolean) {
     const from = range ? anchor.current : null; // read now: the updater runs after the anchor moves
@@ -79,9 +84,9 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
       message: one ? `“${one.title}” moved to the Trash` : `${plural(done.length, 'design', 'designs')} moved to the Trash`,
       advice: advise(done.length === 1 ? 'move-to-trash' : 'bulk-move-to-trash', { count: done.length }),
       undo: async () => {
-        await designs.restore(done);
+        const back = await designs.restore(done); // deleted permanently meanwhile: nothing to restore
         refresh();
-        return true;
+        return back.length > 0;
       },
     });
   }
@@ -204,13 +209,18 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
                 {selecting && (
                   <input
                     type="checkbox"
-                    aria-label={`Select ${s.title}`}
+                    tabIndex={-1}
+                    aria-hidden="true"
                     checked={picked.has(s.id)}
                     onChange={() => undefined}
                     onClick={(e) => pick(s.id, e.shiftKey)}
                   />
                 )}
-                <button className="flex flex-1 flex-col items-start text-left" onClick={() => (selecting ? pick(s.id, false) : onOpen(s.design))}>
+                <button
+                  className="flex flex-1 flex-col items-start text-left"
+                  aria-pressed={selecting ? picked.has(s.id) : undefined}
+                  onClick={(e) => (selecting ? pick(s.id, e.shiftKey) : onOpen(s.design))}
+                >
                   <span className="font-medium">{s.title}</span>
                   <span className="text-xs text-muted">{genres[s.genre]?.title ?? s.genre} · {new Date(s.updated).toLocaleString()}</span>
                 </button>
@@ -237,7 +247,7 @@ export function Gallery({ onOpen }: { onOpen: (d: Design) => void }) {
                   <div key={s.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm">
                     <span className="flex flex-col">
                       <span className="font-medium">{s.title}</span>
-                      <span className="text-xs text-muted">Moved {s.deleted ? new Date(s.deleted).toLocaleString() : ''}</span>
+                      <span className="text-xs text-muted">Moved {s.deletedAt ? new Date(s.deletedAt).toLocaleString() : ''}</span>
                     </span>
                     <span className="flex gap-2">
                       <button type="button" className="text-xs underline" onClick={() => void restore([s.id])}>

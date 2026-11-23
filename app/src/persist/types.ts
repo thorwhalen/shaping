@@ -55,6 +55,8 @@ export interface EmbeddedImage {
 /** Where designs are kept (the default is `state/designs.ts`). */
 export interface DesignRepository {
   list(): Promise<{ id: string; design: Design }[]>;
+  /** Every record, the Trash included (what an import is checked against); `list` when absent. */
+  listAll?(): Promise<{ id: string; design: Design }[]>;
   save(design: Design): Promise<void>;
 }
 

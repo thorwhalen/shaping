@@ -32,3 +32,28 @@ describe('designs: delete means Move to Trash', () => {
     expect(await store.listTrash()).toEqual([]);
   });
 });
+
+describe('a trashed design is never brought back by accident', () => {
+  it('saving it (an editor still open elsewhere) keeps it in the Trash, and it does not open', async () => {
+    const { store, ids } = await make(1);
+    const d = (await store.list())[0]!.design;
+    await store.trash([ids[0]!]);
+    await store.save({ ...d, title: 'edited' });
+    expect(await store.list()).toEqual([]);
+    expect((await store.listTrash())[0]!.title).toBe('edited');
+    expect(await store.get(ids[0]!)).toBeNull();
+    expect((await store.listAll()).length).toBe(1);
+  });
+
+  it('works through a provider without upsert (update merges): restore really clears the mark', async () => {
+    const base = createInMemoryProvider<SavedDesign>([], { idField: 'id' });
+    const { upsert: _u, ...noUpsert } = base as typeof base & { upsert?: unknown };
+    const store = designStore(noUpsert as typeof base);
+    const d = { ...newDesign(Object.keys(genres)[0]!, genres), title: 'x' };
+    await store.save(d);
+    await store.trash([d.id]);
+    expect(await store.list()).toEqual([]);
+    expect(await store.restore([d.id])).toEqual([d.id]);
+    expect((await store.list()).map((x) => x.id)).toEqual([d.id]);
+  });
+});
