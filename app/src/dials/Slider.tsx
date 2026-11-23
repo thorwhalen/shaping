@@ -25,10 +25,12 @@ export interface SliderProps {
   label: string;
   /** The readout beside the slider, given the value it shows (which leads `value` while dragging). */
   readout?: (v: number) => ReactNode;
+  /** The value only changes how things are drawn (camera, light, colour): paced by repaints alone. */
+  paintOnly?: boolean;
 }
 
-export function Slider({ value: saved, min, max, step, onChange, restGhost, disabled, label, readout }: SliderProps) {
-  const paced = usePaced(saved, onChange);
+export function Slider({ value: saved, min, max, step, onChange, restGhost, disabled, label, readout, paintOnly }: SliderProps) {
+  const paced = usePaced(saved, onChange, { paintOnly });
   const value = paced.value;
   const [dragStart, setDragStart] = useState<number | null>(null);
   const startRef = useRef<number | null>(null);

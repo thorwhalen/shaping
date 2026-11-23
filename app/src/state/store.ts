@@ -35,6 +35,8 @@ export interface AppState {
   stale: boolean;
   /** A rebuild has been running for longer than BUSY_AFTER_MS. */
   busy: boolean;
+  /** A paced gesture (a slider drag) is under way: from its first value until its last is on screen. */
+  gesturing: boolean;
   error: string | null;
   masks: Record<string, MaskPreview | null>;
   activeSlot: string;
@@ -171,6 +173,7 @@ export const useApp = create<AppState>()((set, get) => {
     modelKey: '',
     stale: false,
     busy: false,
+    gesturing: false,
     error: null,
     masks: {},
     activeSlot: '',
@@ -220,6 +223,9 @@ export const useApp = create<AppState>()((set, get) => {
     canUndo: false,
     canRedo: false,
     setActiveSlot: (slot) => set({ activeSlot: slot }),
-    setGesture: (active) => void (gesture = active ? 'open' : 'off'),
+    setGesture: (active) => {
+      gesture = active ? 'open' : 'off';
+      if (get().gesturing !== active) set({ gesturing: active });
+    },
   };
 });

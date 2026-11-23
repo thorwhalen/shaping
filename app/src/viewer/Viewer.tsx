@@ -221,10 +221,23 @@ export interface ViewerProps {
   setOverride: (o: { design: Design; model: Model } | null) => void;
   /** Called when the user has orbited, panned or zoomed: the new pose, to store in the design. */
   onPose: (pose: Partial<View>) => void;
+  /** Draw cheaply for now (a drag on a device that cannot keep up): a lower pixel ratio until false again. */
+  draft?: boolean;
   children?: ReactNode;
 }
 
-export function Viewer({ design, model, busy, resetKey, showSlices, override, setOverride, onPose, children }: ViewerProps) {
+/**
+ * Pixel ratios: the range the canvas draws at, and the draft ratio while `draft` is set. A drag on a
+ * slow device then fills a quarter of the pixels on a 2x screen, and the final model is drawn sharp.
+ * Driven by the host's load estimate rather than drei's `PerformanceMonitor`/`AdaptiveDpr`, which
+ * measure frame rate on their own and would disagree with the pacing that decides what is shown at
+ * all. Set through the Canvas `dpr` prop: the Canvas reapplies that prop when it renders, so a
+ * `setDpr` call from inside would be undone.
+ */
+export const MAX_DPR = 2;
+export const DRAFT_DPR = 1;
+
+export function Viewer({ design, model, busy, resetKey, showSlices, override, setOverride, onPose, draft = false, children }: ViewerProps) {
   frameOverride.set = setOverride;
   // Development only: let the browser checks see whether a preview is on screen.
   if (import.meta.env.DEV) (window as unknown as { __override?: unknown }).__override = override;
@@ -233,7 +246,7 @@ export function Viewer({ design, model, busy, resetKey, showSlices, override, se
     <div className="relative h-full w-full">
       <Canvas
         shadows
-        dpr={[1, 2]}
+        dpr={draft ? DRAFT_DPR : [1, MAX_DPR]}
         gl={{ preserveDrawingBuffer: true, antialias: true, localClippingEnabled: true } as never}
         onCreated={({ gl }) => {
           gl.localClippingEnabled = true;

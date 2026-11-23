@@ -21,4 +21,5 @@ registerServiceWorker();
 if (import.meta.env.DEV) {
   void import('./state/store').then((m) => Object.assign(window, { __app: m.useApp }));
   void import('./viewer/Viewer').then((m) => Object.assign(window, { __capture: m.captureRef }));
+  void import('./lib/pacing').then((m) => Object.assign(window, { __load: m.sharedLoad, __paintLoad: m.paintLoad }));
 }
