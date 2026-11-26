@@ -18,7 +18,7 @@ import { useApp } from './state/store';
 import { useDrafting } from './state/settled';
 import { AnimatePanel } from './anim/AnimatePanel';
 import { LightBall, useShiftDragLight } from './viewer/LightBall';
-import { Viewer } from './viewer/Viewer';
+import { Viewer, type ViewerProps } from './viewer/Viewer';
 import { ShareMenu } from './persist/ShareMenu';
 
 const VIEW_DEFAULTS = ViewSchema.parse({});
@@ -141,7 +141,6 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
   const design = useApp((s) => s.design)!;
   const model = useApp((s) => s.model);
   const busy = useApp((s) => s.busy);
-  const drafting = useDrafting();
   const error = useApp((s) => s.error);
   const edit = useApp((s) => s.edit);
   const [profileId, setProfileId] = useState(DEFAULT_PROFILE);
@@ -191,15 +190,23 @@ function Editor({ panel, setPanel, onBack, onOpenDesign }: { panel: string; setP
         </div>
       </aside>
       <main className="relative min-h-[50vh] flex-1" {...(design.view.light === "sun" ? shiftDrag : {})}>
-        <Viewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose} draft={drafting}>
+        <DraftingViewer design={design} model={model} busy={busy} resetKey={resetKey} showSlices={showSlices} override={override} setOverride={setOverride} onPose={setPose}>
           {busy && <div className="pointer-events-none absolute right-3 top-3 rounded bg-white/80 px-2 py-1 text-xs text-muted">Building…</div>}
           {!model && !error && <div className="pointer-events-none absolute inset-0 grid place-items-center text-muted">Building…</div>}
           {design.view.light === 'sun' && <LightBall view={design.view} onChange={setLight} />}
-        </Viewer>
+        </DraftingViewer>
         <StatusBar model={model} error={error} profileId={profileId} />
       </main>
     </div>
   );
+}
+
+/**
+ * The Viewer, drawing drafts while a drag outruns the device (shaping#9). Drafting flips twice per
+ * slow drag; reading it here re-renders only the Viewer, not the Editor and every panel with it.
+ */
+function DraftingViewer(props: Omit<ViewerProps, 'draft'>) {
+  return <Viewer {...props} draft={useDrafting()} />;
 }
 
 function StatusBar({ model, error, profileId }: { model: Model | null; error: string | null; profileId: string }) {

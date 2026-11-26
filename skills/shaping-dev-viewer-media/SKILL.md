@@ -31,6 +31,14 @@ Presets first: matte plastic, glossy plastic, brushed metal, polished metal, gla
 
 A rebuild over about 100 ms puts the viewer in a busy state and dims the old solid. The old solid is never left looking current.
 
+## Responsiveness under load
+
+Display data derived from the model (creased normals) is computed in the geometry worker beside each build and transferred (`app/src/viewer/display.ts`); the page only wraps the arrays. Anything new the viewer derives per model, and that grows with the model, goes there too. Planar regions are a few hundred points and stay on the page.
+
+State that flips during a drag (the `draft` pixel ratio, `gesturing`) is read by the smallest component that needs it: read in the Editor, each flip re-rendered every panel (about 80 ms of main-thread work per drag at 6x throttle on a 30k-triangle design).
+
+Measure a change that touches the drag path with `app/scripts/measure-drag.mjs` against `pnpm dev`: a 40-step drag at 6x CPU throttle, reporting the slowest input step, main-thread long tasks, and release to the final model and to the gesture's end. Alternate the two builds being compared (one dev server each) and report every run: single runs on a loaded machine are noise. `--cdp` attaches to a phone's Chrome.
+
 ## Animation and capture
 
 Animation goes through the previz library (docs/architecture.md section 11): the adapter is `app/src/anim/engine.ts`, the state and its field kinds are in `app/src/anim/state.ts`, formulas in `app/src/anim/formulas.ts`. Do not add encoders or a frame loop to the app; add a formula, a field kind or an engine member instead. The rules below are what the adapter guarantees.
